@@ -11,6 +11,7 @@ The app is an Axum server with server-rendered Rust UI and a small client-side s
 ## Features
 
 - Defensive survival optimizer and offensive KO optimizer views.
+- OHKO, 2HKO, and 3HKO defensive survival goals using combined sequence odds.
 - Editable Showdown-style sets with synchronized UI cards.
 - Move selection, crit toggles, status conditions, natures, stat points, and boost stages.
 - Field controls for format, terrain, weather, screens, Helping Hand, Protect, Gravity, Fairy Aura, and Friend Guard.
@@ -76,6 +77,7 @@ crates/spreadlab-web/assets/item-sprites
 - `GET /api/move-types`
 - `GET /api/species-types`
 - `GET /api/species-abilities`
+- `GET /api/unsupported-items`
 
 ## Development
 

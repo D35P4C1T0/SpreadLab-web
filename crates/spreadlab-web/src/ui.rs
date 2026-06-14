@@ -74,13 +74,20 @@ fn topbar(mode: Mode) -> String {
 }
 
 fn calculation_panel(mode: Mode) -> String {
+    let hit_goal = if mode == Mode::Ko {
+        ""
+    } else {
+        r#"<label class="hit-goal">KO target<select name="hit_goal"><option value="1" selected>OHKO</option><option value="2">2HKO</option><option value="3">3HKO</option></select></label>"#
+    };
     format!(
         r#"<div class="section-title"><span>1</span><b>Calculation</b></div>
 <input name="move_name" type="hidden" value="Iron Head"/>
+{hit_goal}
 {chance_controls}
 <button class="primary" type="submit">Run</button>
 <button class="secondary swap-action" type="button">Swap</button>
 <a class="secondary" href="/survive">Clear</a>"#,
+        hit_goal = hit_goal,
         chance_controls = chance_controls(mode),
     )
 }

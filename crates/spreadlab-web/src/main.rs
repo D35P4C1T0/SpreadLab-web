@@ -108,6 +108,7 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .route("/api/move-types", get(api_move_types))
         .route("/api/species-types", get(api_species_types))
         .route("/api/species-abilities", get(api_species_abilities))
+        .route("/api/unsupported-items", get(api_unsupported_items))
         .nest_service("/assets", assets)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -348,12 +349,27 @@ async fn api_species_abilities() -> Json<HashMap<String, Vec<String>>> {
     Json(map)
 }
 
+async fn api_unsupported_items(State(state): State<AppState>) -> Json<Vec<String>> {
+    Json(unsupported_item_names(&state.data))
+}
+
+fn unsupported_item_names(data: &ChampionsData) -> Vec<String> {
+    let mut items = data
+        .item_names()
+        .filter(|item| spreadlab_rs::data::parse_item(item).is_err())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    items.sort();
+    items
+}
+
 async fn api_damage(
     State(state): State<AppState>,
     Json(mut request): Json<api::DamageRequest>,
-) -> Result<Json<api::DamageResponse>, WebError> {
+) -> Result<Json<Value>, WebError> {
+    let warnings = warning_messages_from_sets([&request.attacker_set, &request.defender_set]);
     normalize_damage_request(&mut request);
-    call_with_data(state, move |data| {
+    call_with_data_value(state, warnings, move |data| {
         api::calculate_damage_request_with_data(&data, request)
     })
     .await
@@ -362,42 +378,72 @@ async fn api_damage(
 async fn api_survive(
     State(state): State<AppState>,
     Json(mut request): Json<api::HpDefSurvivalRequest>,
-) -> Result<Json<api::HpDefSurvivalResponse>, WebError> {
+) -> Result<Json<Value>, WebError> {
+    let warnings = warning_messages_from_sets([&request.attacker_set, &request.defender_set]);
+    let optimize_nature = request.optimize_nature;
+    let limit = request.limit;
     normalize_survive_request(&mut request);
-    call_with_data(state, move |data| {
+    let mut response = call_with_data_value(state, warnings, move |data| {
         api::find_min_hp_def_survival_with_data(&data, request)
     })
-    .await
+    .await?;
+    if optimize_nature {
+        remove_neutral_nature_results(&mut response.0, limit);
+    }
+    Ok(response)
 }
 
 async fn api_sequence(
     State(state): State<AppState>,
     Json(mut request): Json<api::CombinedHpDefSurvivalRequest>,
-) -> Result<Json<api::CombinedHpDefSurvivalResponse>, WebError> {
+) -> Result<Json<Value>, WebError> {
+    let warnings = warning_messages_from_sets(
+        std::iter::once(&request.defender_set)
+            .chain(request.hits.iter().map(|hit| &hit.attacker_set)),
+    );
+    let optimize_nature = request.optimize_nature;
+    let limit = request.limit;
     normalize_sequence_request(&mut request);
-    call_with_data(state, move |data| {
+    let mut response = call_with_data_value(state, warnings, move |data| {
         api::find_min_combined_hp_def_survival_with_data(&data, request)
     })
-    .await
+    .await?;
+    if optimize_nature {
+        remove_neutral_nature_results(&mut response.0, limit);
+    }
+    Ok(response)
 }
 
 async fn api_ko(
     State(state): State<AppState>,
     Json(mut request): Json<api::OffensiveKoRequest>,
-) -> Result<Json<api::OffensiveKoResponse>, WebError> {
+) -> Result<Json<Value>, WebError> {
+    let warnings = warning_messages_from_sets([&request.attacker_set, &request.defender_set]);
+    let optimize_nature = request.optimize_nature;
+    let limit = request.limit;
     normalize_ko_request(&mut request);
-    call_with_data(state, move |data| {
+    let mut response = call_with_data_value(state, warnings, move |data| {
         api::find_min_offensive_ko_with_data(&data, request)
     })
-    .await
+    .await?;
+    if optimize_nature {
+        remove_neutral_nature_results(&mut response.0, limit);
+    }
+    Ok(response)
 }
 
 async fn api_optimize_defensive(
     State(state): State<AppState>,
     Json(mut request): Json<api::OptimizeRequest>,
-) -> Result<Json<Vec<spreadlab_rs::optimize::RankedSpread>>, WebError> {
+) -> Result<Json<Value>, WebError> {
+    let warnings = warning_messages_from_sets(
+        request
+            .benchmarks
+            .iter()
+            .flat_map(|benchmark| [&benchmark.attacker_set, &benchmark.defender_set]),
+    );
     normalize_optimize_request(&mut request);
-    call_with_data(state, move |data| {
+    call_with_data_value(state, warnings, move |data| {
         api::run_defensive_optimization_with_data(&data, request)
     })
     .await
@@ -406,21 +452,34 @@ async fn api_optimize_defensive(
 async fn api_optimize_offensive(
     State(state): State<AppState>,
     Json(mut request): Json<api::OptimizeRequest>,
-) -> Result<Json<Vec<spreadlab_rs::optimize::RankedSpread>>, WebError> {
+) -> Result<Json<Value>, WebError> {
+    let warnings = warning_messages_from_sets(
+        request
+            .benchmarks
+            .iter()
+            .flat_map(|benchmark| [&benchmark.attacker_set, &benchmark.defender_set]),
+    );
     normalize_optimize_request(&mut request);
-    call_with_data(state, move |data| {
+    call_with_data_value(state, warnings, move |data| {
         api::run_offensive_optimization_with_data(&data, request)
     })
     .await
 }
 
-async fn call_with_data<T, F>(state: AppState, f: F) -> Result<Json<T>, WebError>
+async fn call_with_data_value<T, F>(
+    state: AppState,
+    warnings: Vec<String>,
+    f: F,
+) -> Result<Json<Value>, WebError>
 where
-    T: Send + 'static,
+    T: Serialize + Send + 'static,
     F: FnOnce(Arc<ChampionsData>) -> Result<T, api::ApiError> + Send + 'static,
 {
     let data = state.data.clone();
-    Ok(Json(tokio::task::spawn_blocking(move || f(data)).await??))
+    let response = tokio::task::spawn_blocking(move || f(data)).await??;
+    let mut value = serde_json::to_value(response)?;
+    attach_warnings(&mut value, warnings);
+    Ok(Json(value))
 }
 
 fn normalize_damage_request(request: &mut api::DamageRequest) {
@@ -450,6 +509,103 @@ fn normalize_optimize_request(request: &mut api::OptimizeRequest) {
         benchmark.attacker_set = normalize_showdown_set(&benchmark.attacker_set);
         benchmark.defender_set = normalize_showdown_set(&benchmark.defender_set);
     }
+}
+
+fn attach_warnings(value: &mut Value, warnings: Vec<String>) {
+    if warnings.is_empty() {
+        return;
+    }
+    let warnings = warnings.into_iter().map(Value::String).collect::<Vec<_>>();
+    match value {
+        Value::Object(map) => {
+            map.insert("warnings".to_owned(), Value::Array(warnings));
+        }
+        other => {
+            *other = json!({
+                "matches": other.take(),
+                "warnings": warnings
+            });
+        }
+    }
+}
+
+fn remove_neutral_nature_results(value: &mut Value, limit: usize) {
+    let Some(map) = value.as_object_mut() else {
+        return;
+    };
+    let best = map
+        .get_mut("matches")
+        .and_then(Value::as_array_mut)
+        .map(|matches| {
+            matches.retain(|entry| !entry_has_neutral_nature(entry));
+            matches.truncate(default_api_limit(limit));
+            for (index, entry) in matches.iter_mut().enumerate() {
+                if let Some(entry) = entry.as_object_mut() {
+                    entry.insert("rank".to_owned(), json!(index + 1));
+                }
+            }
+            matches.first().cloned().unwrap_or(Value::Null)
+        });
+    if let Some(best) = best {
+        map.insert("best".to_owned(), best);
+    }
+    if map
+        .get("closest_miss")
+        .is_some_and(entry_has_neutral_nature)
+    {
+        map.insert("closest_miss".to_owned(), Value::Null);
+    }
+}
+
+fn entry_has_neutral_nature(entry: &Value) -> bool {
+    entry
+        .get("nature")
+        .and_then(Value::as_str)
+        .is_some_and(is_neutral_nature)
+}
+
+fn is_neutral_nature(nature: &str) -> bool {
+    matches!(
+        nature,
+        "Hardy" | "Bashful" | "Docile" | "Quirky" | "Serious"
+    )
+}
+
+fn default_api_limit(limit: usize) -> usize {
+    if limit == 0 {
+        10
+    } else {
+        limit
+    }
+}
+
+fn warning_messages_from_sets<'a>(sets: impl IntoIterator<Item = &'a String>) -> Vec<String> {
+    let mut warnings = sets
+        .into_iter()
+        .filter_map(|set| unsupported_ability(set))
+        .map(|ability| {
+            format!("Ability {ability} is not supported yet; it was ignored for this calculation.")
+        })
+        .collect::<Vec<_>>();
+    warnings.sort();
+    warnings.dedup();
+    warnings
+}
+
+fn unsupported_ability(text: &str) -> Option<String> {
+    let ability = text.lines().find_map(ability_line_value)?;
+    spreadlab_rs::data::parse_ability(ability)
+        .is_err()
+        .then(|| ability.to_owned())
+}
+
+fn ability_line_value(line: &str) -> Option<&str> {
+    let trimmed = line.trim();
+    let (label, value) = trimmed.split_once(':')?;
+    label
+        .eq_ignore_ascii_case("Ability")
+        .then(|| value.trim())
+        .filter(|value| !value.is_empty())
 }
 
 async fn form_damage(State(state): State<AppState>, Form(form): Form<DamageForm>) -> Html<String> {
@@ -866,6 +1022,11 @@ fn normalize_showdown_set(text: &str) -> String {
         let trimmed = line.trim();
         if trimmed.to_ascii_lowercase().starts_with("ability:") {
             ability_insert_at = Some(out.len() + 1);
+            if let Some(ability) = ability_line_value(trimmed) {
+                if spreadlab_rs::data::parse_ability(ability).is_err() {
+                    continue;
+                }
+            }
         }
         if trimmed.to_ascii_lowercase().starts_with("ability on:") {
             has_ability_on = true;
@@ -904,6 +1065,14 @@ fn normalize_showdown_set(text: &str) -> String {
         }
         if trimmed.to_ascii_lowercase().contains("@ floettite") {
             out.push(line.replace("@ Floettite", "").replace("@ floettite", ""));
+        } else if let Some((name, item)) = line.split_once('@') {
+            if spreadlab_rs::data::parse_item(item.trim()).is_err()
+                && is_damage_neutral_unsupported_item(item.trim())
+            {
+                out.push(name.trim_end().to_owned());
+            } else {
+                out.push(line);
+            }
         } else {
             out.push(line);
         }
@@ -919,6 +1088,27 @@ fn normalize_showdown_set(text: &str) -> String {
         out.insert(insert_at.unwrap_or(1).min(out.len()), line);
     }
     out.join("\n")
+}
+
+fn is_damage_neutral_unsupported_item(item: &str) -> bool {
+    matches!(
+        normalize_item_key(item).as_str(),
+        "heavydutyboots"
+            | "shedshell"
+            | "terrainextender"
+            | "damprock"
+            | "heatrock"
+            | "icyrock"
+            | "smoothrock"
+            | "lightclay"
+    )
+}
+
+fn normalize_item_key(item: &str) -> String {
+    item.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 fn de_u8<'de, D>(deserializer: D) -> Result<u8, D::Error>
@@ -1025,4 +1215,160 @@ fn item_slug(name: &str) -> String {
         .to_ascii_lowercase()
         .replace(['\'', '.'], "")
         .replace(' ', "-")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_damage_lib_champions_items_are_supported_by_spreadlab_parser() {
+        let data = ChampionsData::load().expect("Champions data loads");
+        assert_eq!(unsupported_item_names(&data), Vec::<String>::new());
+    }
+
+    #[test]
+    fn neutral_unsupported_items_are_removed_before_core_parse() {
+        let normalized = normalize_showdown_set(
+            "Kingambit @ Shed Shell\nAbility: Defiant\nAdamant Nature\n- Iron Head",
+        );
+        assert!(normalized.starts_with("Kingambit\n"));
+        assert!(!normalized.contains("Shed Shell"));
+    }
+
+    #[test]
+    fn battle_relevant_items_are_not_stripped() {
+        for item in [
+            "Focus Sash",
+            "Leftovers",
+            "Black Sludge",
+            "Safety Goggles",
+            "Covert Cloak",
+            "Rocky Helmet",
+            "Eject Button",
+            "Eject Pack",
+            "Red Card",
+        ] {
+            let normalized = normalize_showdown_set(&format!(
+                "Kingambit @ {item}\nAbility: Defiant\nAdamant Nature\n- Iron Head"
+            ));
+            assert!(normalized.contains(item));
+        }
+    }
+
+    #[test]
+    fn unknown_items_still_reach_core_parse_and_fail_loudly() {
+        let normalized = normalize_showdown_set(
+            "Kingambit @ Definitely Damage Relevant\nAbility: Defiant\nAdamant Nature\n- Iron Head",
+        );
+        assert!(normalized.contains("@ Definitely Damage Relevant"));
+    }
+
+    #[test]
+    fn unsupported_abilities_are_warned_and_removed_before_core_parse() {
+        let raw = "Garchomp @ Focus Sash\nAbility: Rough Skin\nJolly Nature\n- Earthquake";
+        let normalized = normalize_showdown_set(raw);
+        let warnings = warning_messages_from_sets([&raw.to_owned()]);
+
+        assert!(!normalized.contains("Ability: Rough Skin"));
+        assert_eq!(
+            warnings,
+            vec![
+                "Ability Rough Skin is not supported yet; it was ignored for this calculation."
+                    .to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn optimized_nature_results_drop_neutral_natures() {
+        let mut value = json!({
+            "best": { "rank": 1, "nature": "Hardy" },
+            "matches": [
+                { "rank": 1, "nature": "Hardy" },
+                { "rank": 2, "nature": "Bold" },
+                { "rank": 3, "nature": "Serious" },
+                { "rank": 4, "nature": "Calm" }
+            ],
+            "closest_miss": { "rank": 1, "nature": "Quirky" }
+        });
+
+        remove_neutral_nature_results(&mut value, 10);
+
+        assert_eq!(value["best"]["nature"], "Bold");
+        assert_eq!(value["matches"][0]["rank"], 1);
+        assert_eq!(value["matches"][0]["nature"], "Bold");
+        assert_eq!(value["matches"][1]["rank"], 2);
+        assert_eq!(value["matches"][1]["nature"], "Calm");
+        assert!(value["closest_miss"].is_null());
+    }
+
+    #[test]
+    fn defensive_optimizer_allows_attacker_sps_over_total_cap() {
+        let data = ChampionsData::load().expect("Champions data loads");
+        let response = api::find_min_hp_def_survival_with_data(
+            &data,
+            api::HpDefSurvivalRequest {
+                attacker_set: normalize_showdown_set(
+                    "Kingambit @ Black Glasses\n\
+                     Ability: Defiant\n\
+                     SPs: 32 HP / 32 Atk / 32 Def\n\
+                     Adamant Nature\n\
+                     - Iron Head",
+                ),
+                defender_set: normalize_showdown_set(
+                    "Mega Floette\n\
+                     Ability: Fairy Aura\n\
+                     Timid Nature\n\
+                     - Protect",
+                ),
+                move_name: "Iron Head".to_owned(),
+                max_ko_chance: 0.125,
+                hp_percent: Some(100.0),
+                nature: None,
+                optimize_nature: true,
+                limit: 1,
+                move_times_affected: 0,
+                critical: false,
+                field: None,
+            },
+        )
+        .expect("defensive optimization accepts over-cap attacker SP total");
+
+        assert!(response.best.is_some());
+    }
+
+    #[test]
+    fn offensive_optimizer_allows_defender_sps_over_total_cap() {
+        let data = ChampionsData::load().expect("Champions data loads");
+        let response = api::find_min_offensive_ko_with_data(
+            &data,
+            api::OffensiveKoRequest {
+                attacker_set: normalize_showdown_set(
+                    "Kingambit @ Black Glasses\n\
+                     Ability: Defiant\n\
+                     Adamant Nature\n\
+                     - Iron Head",
+                ),
+                defender_set: normalize_showdown_set(
+                    "Mega Floette\n\
+                     Ability: Fairy Aura\n\
+                     SPs: 32 HP / 32 Def / 32 SpD\n\
+                     Timid Nature\n\
+                     - Protect",
+                ),
+                move_name: "Iron Head".to_owned(),
+                min_ko_chance: 0.0,
+                nature: None,
+                optimize_nature: true,
+                limit: 1,
+                move_times_affected: 0,
+                critical: false,
+                field: None,
+            },
+        )
+        .expect("offensive optimization accepts over-cap defender SP total");
+
+        assert!(response.best.is_some());
+    }
 }

@@ -131,7 +131,7 @@ function renderCard(card, parsed) {
   }
 
   const nature = card.querySelector("[data-card-nature]");
-  if (nature && [...nature.options].some((option) => option.value === parsed.nature)) nature.value = parsed.nature;
+  if (nature && nature.value !== "Any" && [...nature.options].some((option) => option.value === parsed.nature)) nature.value = parsed.nature;
   const status = card.querySelector("[data-status-select]");
   if (status && [...status.options].some((option) => option.value === parsed.status)) status.value = parsed.status;
 
@@ -384,8 +384,12 @@ function initMoves() {
 }
 
 function initPersistentInputs() {
-  document.querySelectorAll('[name="hp_percent"], [name="max_ko_chance"], [name="min_ko_chance"], [name="limit"]').forEach((input) => {
+  document.querySelectorAll('[name="hp_percent"], [name="max_ko_chance"], [name="min_ko_chance"], [name="limit"], [name="hit_goal"]').forEach((input) => {
     input.addEventListener("input", saveState);
+    input.addEventListener("change", () => {
+      saveState();
+      autoRun();
+    });
   });
 }
 
@@ -427,6 +431,7 @@ function fieldPayload() {
 }
 
 function currentPayload() {
+  const hitGoal = Math.max(1, Math.min(3, number("hit_goal", 1)));
   const base = {
     attacker_set: setWithStatus(setWithAbilityState(document.querySelector('[name="attacker_set"]')?.value || "", "attacker"), "attacker"),
     defender_set: setWithStatus(setWithAbilityState(document.querySelector('[name="defender_set"]')?.value || "", "defender"), "defender"),
@@ -438,6 +443,26 @@ function currentPayload() {
   const path = location.pathname;
   if (path.includes("ko")) return { path: "/api/ko", body: { ...base, min_ko_chance: koChance("min_ko_chance", 16), nature: natureValue("attacker"), optimize_nature: optimizeNature("attacker"), limit: number("limit", 10) } };
   if (path.includes("optimize")) return { path: "/api/optimize/defensive", body: { benchmarks: [base], full_spend: false, locked: lockedStats(), limit: number("limit", 10) } };
+  if (hitGoal > 1) {
+    return {
+      path: "/api/survive-sequence",
+      body: {
+        defender_set: base.defender_set,
+        hits: Array.from({ length: hitGoal }, () => ({
+          attacker_set: base.attacker_set,
+          move_name: base.move_name,
+          move_times_affected: base.move_times_affected,
+          critical: base.critical,
+          field: base.field,
+        })),
+        max_ko_chance: koChance("max_ko_chance", 2),
+        hp_percent: number("hp_percent", 100),
+        nature: natureValue("defender"),
+        optimize_nature: optimizeNature("defender"),
+        limit: number("limit", 10),
+      },
+    };
+  }
   return { path: "/api/survive", body: { ...base, max_ko_chance: koChance("max_ko_chance", 2), hp_percent: number("hp_percent", 100), nature: natureValue("defender"), optimize_nature: optimizeNature("defender"), limit: number("limit", 10) } };
 }
 
@@ -476,6 +501,7 @@ function collectState() {
     hpPercent: fieldInput('[name="hp_percent"]')?.value || "100",
     maxKo: fieldInput('[name="max_ko_chance"]')?.value || "2",
     minKo: fieldInput('[name="min_ko_chance"]')?.value || "16",
+    hitGoal: fieldInput('[name="hit_goal"]')?.value || "1",
     limit: fieldInput('[name="limit"]')?.value || "10",
     attackerNature: fieldInput('[data-set-card="attacker"] [data-card-nature]')?.value || "",
     defenderNature: fieldInput('[data-set-card="defender"] [data-card-nature]')?.value || "",
@@ -511,6 +537,7 @@ function restoreState() {
     setValue('[name="hp_percent"]', state.hpPercent);
     setValue('[name="max_ko_chance"]', normalizeKoRollValue(state.maxKo, 2));
     setValue('[name="min_ko_chance"]', normalizeKoRollValue(state.minKo, 16));
+    setValue('[name="hit_goal"]', state.hitGoal);
     setValue('[name="limit"]', state.limit);
     setValue('[data-set-card="attacker"] [data-card-nature]', state.attackerNature);
     setValue('[data-set-card="defender"] [data-card-nature]', state.defenderNature);
@@ -592,14 +619,19 @@ async function initRun() {
 
 function renderResults(data) {
   if (data.summary) {
-    return resultShell("Damage", "16 rolls", "", `${damageCard(data.summary)}<pre class="json-result" data-tab-panel="raw">${escapeHtml((data.rolls || []).join(", "))}</pre>`);
+    return resultShell("Damage", "16 rolls", "", `${warningsCard(data.warnings)}${damageCard(data.summary)}<pre class="json-result" data-tab-panel="raw">${escapeHtml((data.rolls || []).join(", "))}</pre>`);
   }
   const matches = Array.isArray(data) ? data : (data.matches || []);
   const best = data.best || matches[0] || null;
   const count = matches.length;
   const bestLabel = best?.sp_line || "No match";
-  const body = best ? `${bestCard(best)}${damageCard(best.result || best.combined || {})}${matchesTable(matches)}<pre class="json-result" data-tab-panel="raw">${escapeHtml(JSON.stringify(data, null, 2))}</pre>` : `<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
+  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {})}${matchesTable(matches)}<pre class="json-result" data-tab-panel="raw">${escapeHtml(JSON.stringify(data, null, 2))}</pre>` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
   return resultShell("Results", `${count} results`, bestLabel, body);
+}
+
+function warningsCard(warnings) {
+  if (!Array.isArray(warnings) || !warnings.length) return "";
+  return `<article class="warning-card">${warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</article>`;
 }
 
 function resultShell(title, count, best, body) {
