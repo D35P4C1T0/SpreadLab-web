@@ -32,6 +32,36 @@ Then open:
 http://127.0.0.1:3000/survive
 ```
 
+## Docker
+
+Build and run with Docker:
+
+```sh
+docker build -t spreadlab-web .
+docker run -d \
+  --name spreadlab-web \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  spreadlab-web
+```
+
+Or with Compose:
+
+```sh
+docker compose up -d --build
+```
+
+The container serves on `0.0.0.0:3000`. Put it behind Caddy, Traefik, Nginx, or another reverse proxy for HTTPS.
+
+Sprite and item images are fetched on demand and cached under:
+
+```text
+crates/spreadlab-web/assets/sprites-static
+crates/spreadlab-web/assets/item-sprites
+```
+
+`compose.yaml` mounts named volumes for those caches so they survive container rebuilds.
+
 ## API Routes
 
 - `GET /api/meta`

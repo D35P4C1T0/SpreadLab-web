@@ -1,0 +1,14 @@
+services:
+  spreadlab-web:
+    build: .
+    container_name: spreadlab-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - sprite-cache:/app/crates/spreadlab-web/assets/sprites-static
+      - item-cache:/app/crates/spreadlab-web/assets/item-sprites
+
+volumes:
+  sprite-cache:
+  item-cache:

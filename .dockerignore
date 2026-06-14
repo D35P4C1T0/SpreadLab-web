@@ -1,0 +1,7 @@
+/.git
+/target
+**/*.rs.bk
+/crates/spreadlab-web/assets/sprites
+/crates/spreadlab-web/assets/sprites-static
+/crates/spreadlab-web/assets/item-sprites
+.DS_Store
