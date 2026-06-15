@@ -237,9 +237,6 @@ h3 { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
 .results-head b { font-size: 16px; }
 .results-head span { color: var(--cyan); background: rgb(40 214 202 / 14%); padding: 3px 8px; border-radius: 7px; font-weight: 800; }
 .results-head p { margin: 0 0 0 auto; color: var(--text); }
-.result-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
-.result-tabs button { text-align: center; padding: 9px 6px; color: var(--muted); font-size: 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; }
-.result-tabs button.active { color: var(--cyan); border-color: var(--cyan); font-weight: 800; }
 .best-card, .damage-card, .table-card, .warning-card {
   margin-top: 7px; padding: 12px; border: 1px solid #263544; border-radius: 6px;
   background: #101a23;
@@ -282,6 +279,13 @@ td:nth-child(4), td:nth-child(5) { color: var(--gold); font-weight: 900; }
 .error-card h2 { color: var(--red); }
 .result-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 7px; }
 .result-actions button { height: 34px; border: 1px solid var(--line); border-radius: 5px; background: #172434; color: var(--text); font-weight: 800; }
+.result-actions button:disabled {
+  cursor: not-allowed;
+  color: #75808b;
+  background: #111a23;
+  border-color: #24313e;
+  opacity: .58;
+}
 
 @media (max-width: 1250px) {
   body { min-width: 0; }

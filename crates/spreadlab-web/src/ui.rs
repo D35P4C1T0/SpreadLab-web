@@ -23,7 +23,8 @@ pub fn render(mode: Mode, result: Option<ResultBlock>) -> String {
   <aside class="side-column"><section class="calc-panel">{calc}</section>{field}</aside>
   <main class="sets-panel">{sets}</main>
   <section class="results-panel">{results}</section>
-</form>"#,
+</form>
+{early_restore}"#,
         top = topbar(mode),
         action = mode.action(),
         hidden_sets = hidden_sets(mode),
@@ -31,8 +32,99 @@ pub fn render(mode: Mode, result: Option<ResultBlock>) -> String {
         sets = pokemon_sets(mode),
         field = field_panel(),
         results = results_panel(mode, result.as_ref()),
+        early_restore = early_restore_script(),
     );
     render_shell(mode.title(), body)
+}
+
+fn early_restore_script() -> &'static str {
+    r#"<script>
+(() => {
+  const key = "spreadlab.webui.state.v1";
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  const setValue = (selector, value) => {
+    if (value == null || value === "") return;
+    const input = document.querySelector(selector);
+    if (input) input.value = value;
+  };
+  const setChecked = (selector, checked) => {
+    const input = document.querySelector(selector);
+    if (input && typeof checked === "boolean") input.checked = checked;
+  };
+  const setSelectedMove = (moveName) => {
+    if (!moveName) return;
+    setValue('[name="move_name"]', moveName);
+    document.querySelectorAll(".move").forEach((node) => {
+      node.classList.toggle("selected", node.dataset.move === moveName);
+    });
+  };
+  const firstLine = (lines, matcher, fallback = "") => {
+    const line = lines.find((entry) => matcher.test(entry));
+    return line ? line.replace(matcher, "").trim() : fallback;
+  };
+  const parseSet = (text) => {
+    const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const [rawName = "Unknown", rawItem = "None"] = (lines[0] || "Unknown").split("@").map((part) => part.trim());
+    return {
+      name: rawName || "Unknown",
+      item: rawItem || "None",
+      ability: firstLine(lines, /^Ability:\s*/i, "None"),
+    };
+  };
+  const typeClass = (type) => `type-badge type-${String(type).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const renderCard = (key, text) => {
+    const card = document.querySelector(`[data-set-card="${key}"]`);
+    if (!card || !text) return;
+    const parsed = parseSet(text);
+    const name = card.querySelector('[data-field="name"]');
+    if (name) name.innerHTML = `${escapeHtml(parsed.name)} <em>${key === "attacker" ? "♂" : "♀"}</em>`;
+    card.querySelector('[data-field="ability"]')?.replaceChildren(document.createTextNode(parsed.ability));
+    card.querySelector('[data-field="item"]')?.replaceChildren(document.createTextNode(parsed.item));
+    const types = card.querySelector('[data-field="types"]');
+    const savedTypes = key === "attacker" ? window.__spreadlabEarlyState?.attackerTypes : window.__spreadlabEarlyState?.defenderTypes;
+    if (types && Array.isArray(savedTypes) && savedTypes.length) {
+      types.innerHTML = savedTypes.map((type) => `<span class="${typeClass(type)}">${escapeHtml(type)}</span>`).join("");
+    } else if (types) {
+      types.innerHTML = '<span class="type type-unknown">...</span>';
+    }
+    const sprite = card.querySelector("[data-sprite-name]");
+    if (sprite) {
+      sprite.dataset.spriteName = parsed.name;
+      sprite.src = `/api/sprite/${encodeURIComponent(parsed.name)}`;
+      sprite.alt = `${parsed.name} sprite`;
+    }
+    const item = card.querySelector("[data-item-sprite]");
+    if (item) {
+      item.dataset.itemSprite = parsed.item;
+      item.src = `/api/item-sprite/${encodeURIComponent(parsed.item)}`;
+      item.alt = parsed.item;
+    }
+  };
+  try {
+    const state = JSON.parse(localStorage.getItem(key) || "null");
+    if (!state) return;
+    window.__spreadlabEarlyState = state;
+    setValue('[data-set-card="attacker"] .raw-editor', state.attacker);
+    setValue('[data-set-card="defender"] .raw-editor', state.defender);
+    setSelectedMove(state.move);
+    setValue('[name="hp_percent"]', state.hpPercent);
+    setValue('[name="max_ko_chance"]', state.maxKo);
+    setValue('[name="min_ko_chance"]', state.minKo);
+    setValue('[name="hit_goal"]', state.hitGoal);
+    setValue('[name="limit"]', state.limit);
+    setValue('[data-set-card="attacker"] [data-card-nature]', state.attackerNature);
+    setValue('[data-set-card="defender"] [data-card-nature]', state.defenderNature);
+    setChecked('[data-set-card="attacker"] [data-ability-toggle]', state.attackerAbilityOn);
+    setChecked('[data-set-card="defender"] [data-ability-toggle]', state.defenderAbilityOn);
+    setValue('[data-set-card="attacker"] [data-status-select]', state.attackerStatus);
+    setValue('[data-set-card="defender"] [data-status-select]', state.defenderStatus);
+    for (const [name, value] of Object.entries(state.boosts || {})) setValue(`[name="${CSS.escape(name)}"]`, value);
+    for (const [move, checked] of Object.entries(state.crits || {})) setChecked(`[data-crit-move="${CSS.escape(move)}"]`, checked);
+    renderCard("attacker", state.attacker);
+    renderCard("defender", state.defender);
+  } catch (_) {}
+})();
+</script>"#
 }
 
 fn render_shell(title: &str, body: String) -> String {
@@ -251,26 +343,12 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         }
     };
     if let Some(summary) = value.get("summary") {
-        let rolls = value
-            .get("rolls")
-            .and_then(Value::as_array)
-            .map(|rolls| {
-                rolls
-                    .iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
-            .unwrap_or_default();
         return result_shell(
             "Damage",
             "16 rolls",
             "",
             &damage_card(summary, "Damage calculation", "PASS"),
-            &format!(
-                r#"<pre class="json-result" data-tab-panel="raw">{}</pre>"#,
-                escape(&rolls)
-            ),
+            "",
         );
     }
 
@@ -299,10 +377,6 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         html.push_str(&damage_card(result, "Benchmark damage", "PASS"));
     }
     html.push_str(&matches_table(&matches));
-    html.push_str(&format!(
-        r#"<pre class="json-result" data-tab-panel="raw">{}</pre>"#,
-        escape(json)
-    ));
     result_shell(
         "Results",
         &format!("{count} results"),
@@ -315,9 +389,8 @@ fn render_json_result(mode: Mode, json: &str) -> String {
 fn result_shell(title: &str, count: &str, best: &str, body: &str, extra: &str) -> String {
     format!(
         r#"<div class="results-head"><b>{title}</b><span>{count}</span><p>{best}</p></div>
-<nav class="result-tabs"><button type="button" class="active" data-result-tab="best">Best Spread</button><button type="button" data-result-tab="all">All Results</button><button type="button" data-result-tab="damage">Damage Breakdown</button><button type="button" data-result-tab="raw">Raw Rolls</button></nav>
 {body}{extra}
-<div class="result-actions"><button type="button">▣ Copy Set</button><button type="button">⇩ Download JSON</button><button class="share-action" type="button">↗ Share Link</button></div>"#
+<div class="result-actions"><button type="button" disabled aria-disabled="true">▣ Copy Set</button><button type="button" disabled aria-disabled="true">⇩ Download JSON</button><button class="share-action" type="button" disabled aria-disabled="true">↗ Share Link</button></div>"#
     )
 }
 

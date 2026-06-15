@@ -150,11 +150,14 @@ function renderCard(card, parsed) {
 
   const moves = card.querySelector('[data-field="moves"]');
   if (moves && parsed.moves.length) {
-    moves.innerHTML = parsed.moves.map((move, index) =>
-      `<button class="move ${index === 0 ? "selected" : ""}" type="button" data-move="${escapeAttr(move)}">${escapeHtml(move)} <span class="${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label></button>`
-    ).join("");
     const moveInput = document.querySelector('[name="move_name"]');
-    if (moveInput && card.dataset.setCard === "attacker") moveInput.value = parsed.moves[0];
+    const selectedMove = card.dataset.setCard === "attacker" && parsed.moves.includes(moveInput?.value)
+      ? moveInput.value
+      : parsed.moves[0];
+    moves.innerHTML = parsed.moves.map((move) =>
+      `<button class="move ${move === selectedMove ? "selected" : ""}" type="button" data-move="${escapeAttr(move)}">${escapeHtml(move)} <span class="${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label></button>`
+    ).join("");
+    if (card.dataset.setCard === "attacker") setSelectedMove(selectedMove);
   }
 
   for (const [key] of statOrder) {
@@ -215,6 +218,15 @@ function moveType(move) {
 
 function typeClass(type) {
   return `type-badge type-${String(type).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
+function setSelectedMove(moveName) {
+  if (!moveName) return;
+  const moveInput = document.querySelector('[name="move_name"]');
+  if (moveInput) moveInput.value = moveName;
+  document.querySelectorAll(".move").forEach((node) => {
+    node.classList.toggle("selected", node.dataset.move === moveName);
+  });
 }
 
 function syncRawEditor(editor) {
@@ -286,6 +298,7 @@ function initBoostBoxes() {
       if (input.value === "" || input.value === "-") return;
       input.value = Math.max(-6, Math.min(6, Number(input.value || 0)));
       saveState();
+      autoRun();
     });
     input.addEventListener("blur", () => {
       const parsed = Number(input.value);
@@ -492,11 +505,19 @@ function koChance(name, fallbackRolls) {
   return Math.max(0, Math.min(16, rolls)) / 16;
 }
 
+function cardTypes(cardKey) {
+  return [...document.querySelectorAll(`[data-set-card="${cardKey}"] [data-field="types"] span`)]
+    .map((span) => span.textContent.trim())
+    .filter((type) => type && type !== "..." && type !== "Unknown");
+}
+
 function collectState() {
   const fieldInput = (selector) => document.querySelector(selector);
   return {
     attacker: document.querySelector('[data-set-card="attacker"] .raw-editor')?.value || "",
     defender: document.querySelector('[data-set-card="defender"] .raw-editor')?.value || "",
+    attackerTypes: cardTypes("attacker"),
+    defenderTypes: cardTypes("defender"),
     move: document.querySelector('[name="move_name"]')?.value || "",
     hpPercent: fieldInput('[name="hp_percent"]')?.value || "100",
     maxKo: fieldInput('[name="max_ko_chance"]')?.value || "2",
@@ -529,7 +550,7 @@ function saveState() {
 function restoreState() {
   try {
     const state = JSON.parse(localStorage.getItem(storageKey) || "null");
-    if (!state) return;
+    if (!state) return false;
     restoredState = state;
     setValue('[data-set-card="attacker"] .raw-editor', state.attacker);
     setValue('[data-set-card="defender"] .raw-editor', state.defender);
@@ -551,7 +572,10 @@ function restoreState() {
     setRadio("weather", state.field?.weather);
     for (const [name, checked] of Object.entries(state.field?.checks || {})) setChecked(`[name="${cssEscape(name)}"]`, checked);
     for (const [move, checked] of Object.entries(state.crits || {})) setChecked(`[data-crit-move="${cssEscape(move)}"]`, checked);
-  } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function applyRestoredDynamicState() {
@@ -607,7 +631,6 @@ async function initRun() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || response.statusText);
       panel.innerHTML = renderResults(data);
-      initResultTabs();
       initShare();
     } catch (error) {
       panel.innerHTML = `<div class="results-head"><b>Error</b><span>0 results</span></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
@@ -619,13 +642,13 @@ async function initRun() {
 
 function renderResults(data) {
   if (data.summary) {
-    return resultShell("Damage", "16 rolls", "", `${warningsCard(data.warnings)}${damageCard(data.summary)}<pre class="json-result" data-tab-panel="raw">${escapeHtml((data.rolls || []).join(", "))}</pre>`);
+    return resultShell("Damage", "16 rolls", "", `${warningsCard(data.warnings)}${damageCard(data.summary)}`);
   }
   const matches = Array.isArray(data) ? data : (data.matches || []);
   const best = data.best || matches[0] || null;
   const count = matches.length;
   const bestLabel = best?.sp_line || "No match";
-  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {})}${matchesTable(matches)}<pre class="json-result" data-tab-panel="raw">${escapeHtml(JSON.stringify(data, null, 2))}</pre>` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
+  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {})}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
   return resultShell("Results", `${count} results`, bestLabel, body);
 }
 
@@ -636,8 +659,7 @@ function warningsCard(warnings) {
 
 function resultShell(title, count, best, body) {
   return `<div class="results-head"><b>${title}</b><span>${count}</span><p>${escapeHtml(best)}</p></div>
-<nav class="result-tabs"><button type="button" class="active" data-result-tab="best">Best Spread</button><button type="button" data-result-tab="all">All Results</button><button type="button" data-result-tab="damage">Damage Breakdown</button><button type="button" data-result-tab="raw">Raw Rolls</button></nav>
-${body}<div class="result-actions"><button type="button">▣ Copy Set</button><button type="button">⇩ Download JSON</button><button class="share-action" type="button">↗ Share Link</button></div>`;
+${body}<div class="result-actions"><button type="button" disabled aria-disabled="true">▣ Copy Set</button><button type="button" disabled aria-disabled="true">⇩ Download JSON</button><button class="share-action" type="button" disabled aria-disabled="true">↗ Share Link</button></div>`;
 }
 
 function bestCard(best) {
@@ -690,18 +712,6 @@ function initShare() {
       if (payload.m) document.querySelector('[name="move_name"]').value = payload.m;
     }
   } catch (_) {}
-}
-
-function initResultTabs() {
-  document.querySelectorAll("[data-result-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const tab = button.dataset.resultTab;
-      document.querySelectorAll("[data-result-tab]").forEach((b) => b.classList.toggle("active", b === button));
-      document.querySelectorAll("[data-tab-panel]").forEach((panel) => {
-        panel.classList.toggle("tab-hidden", panel.dataset.tabPanel !== tab && !(tab === "best" && panel.dataset.tabPanel === "damage"));
-      });
-    });
-  });
 }
 
 function selectedCrit() {
@@ -869,10 +879,10 @@ function megaAlias(value) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  restoreState();
   await loadMoveTypes();
   await loadSpeciesTypes();
   await loadSpeciesAbilities();
-  restoreState();
   initShare();
   initRun();
   initToggles();
@@ -884,7 +894,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initStatuses();
   initRawEditors();
   applyRestoredDynamicState();
+  saveState();
   initMoves();
   initSwap();
-  initResultTabs();
 });
