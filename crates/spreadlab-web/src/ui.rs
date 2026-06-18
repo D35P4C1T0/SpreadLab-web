@@ -137,7 +137,7 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-                <link rel="stylesheet" href="/assets/app.css?v=20260613-6"/>
+                <link rel="stylesheet" href="/assets/app.css?v=20260618-1"/>
                 <script defer src="/assets/app.js?v=20260613-6"></script>
             </head>
             <body inner_html=body></body>
@@ -154,7 +154,7 @@ fn topbar(mode: Mode) -> String {
   <div class="brand">
     <div class="brand-mark"><img src="/api/item-sprite/Energy%20Root" alt="SpreadLab"/></div>
     <strong>SpreadLab</strong>
-    <span>[Gen 9 Champions] VGC 2026 Reg M-A</span>
+                <span>[Gen 9 Champions] VGC 2026 Reg M-B</span>
   </div>
   <nav class="mode-tabs">
     <a class="{defensive}" href="/survive">Defensive Calculator</a>

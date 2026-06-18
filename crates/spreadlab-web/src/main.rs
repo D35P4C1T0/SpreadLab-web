@@ -264,7 +264,7 @@ async fn api_meta(State(state): State<AppState>) -> Result<Json<api::MetadataRes
     let response = tokio::task::spawn_blocking(move || {
         let mut response = api::MetadataResponse {
             species: data.species_names().map(str::to_owned).collect(),
-            regulation: data.regulation_m_a_names().map(str::to_owned).collect(),
+            regulation: data.regulation_m_b_names().map(str::to_owned).collect(),
             items: data.item_names().map(str::to_owned).collect(),
             abilities: data.ability_names().map(str::to_owned).collect(),
             moves: data.move_names().map(str::to_owned).collect(),

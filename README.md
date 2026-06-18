@@ -3,7 +3,7 @@
 Dedicated Rust WebUI for [SpreadLab](https://github.com/D35P4C1T0/SpreadLab), a Pokémon Champions damage and spread optimization tool for:
 
 ```text
-[Gen 9 Champions] VGC 2026 Reg M-A
+[Gen 9 Champions] VGC 2026 Reg M-B
 ```
 
 The app is an Axum server with server-rendered Rust UI and a small client-side script for calculator interactions. It consumes the upstream `spreadlab-rs` public API and does not copy damage formulas, stat conversion logic, or optimizer internals.

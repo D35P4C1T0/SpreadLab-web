@@ -1462,7 +1462,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pkmn-dmg-lib"
 version = "0.1.0"
-source = "git+https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git#74f699811b813cc667461376771714c3aeda18a9"
+source = "git+https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git?rev=f415eb36b2899795e0908f9fb3ae1fae242a0968#f415eb36b2899795e0908f9fb3ae1fae242a0968"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -2119,7 +2119,7 @@ dependencies = [
 [[package]]
 name = "spreadlab-rs"
 version = "0.1.0"
-source = "git+https://github.com/D35P4C1T0/SpreadLab.git?rev=4eb0d5168475ef3ca77edf0733aa1c53866b9dc4#4eb0d5168475ef3ca77edf0733aa1c53866b9dc4"
+source = "git+https://github.com/D35P4C1T0/SpreadLab.git?rev=5ca44b4#5ca44b446ba820ede3e0731fb81f544818fde635"
 dependencies = [
  "anyhow",
  "clap",
