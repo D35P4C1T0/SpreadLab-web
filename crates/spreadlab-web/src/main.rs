@@ -11,7 +11,12 @@ use clap::{Parser, Subcommand};
 use serde::{de, de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use spreadlab_rs::{api, data::ChampionsData};
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+};
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -106,6 +111,7 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .route("/api/sprite/:name", get(api_sprite))
         .route("/api/item-sprite/:name", get(api_item_sprite))
         .route("/api/move-types", get(api_move_types))
+        .route("/api/pokemon-list", get(api_pokemon_list))
         .route("/api/species-types", get(api_species_types))
         .route("/api/species-abilities", get(api_species_abilities))
         .route("/api/unsupported-items", get(api_unsupported_items))
@@ -296,6 +302,136 @@ async fn api_move_types(State(state): State<AppState>) -> Json<HashMap<String, S
         })
         .collect();
     Json(map)
+}
+
+async fn api_pokemon_list(State(state): State<AppState>) -> Json<Vec<String>> {
+    let mut names = state
+        .data
+        .species_names()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+
+    if let Some(showdown) = fetch_showdown_pokemon_names().await {
+        names.extend(showdown);
+    }
+    if let Some(mega_names) = fetch_wikipedia_mega_names().await {
+        names.extend(mega_names);
+    }
+    names.extend(ZA_MEGA_FALLBACKS.iter().map(|name| (*name).to_owned()));
+
+    Json(names.into_iter().collect())
+}
+
+const ZA_MEGA_FALLBACKS: &[&str] = &[
+    "Mega Raichu",
+    "Mega Raichu X",
+    "Mega Raichu Y",
+    "Mega Clefable",
+    "Mega Victreebel",
+    "Mega Starmie",
+    "Mega Dragonite",
+    "Mega Meganium",
+    "Mega Feraligatr",
+    "Mega Skarmory",
+    "Mega Chimecho",
+    "Mega Absol Z",
+    "Mega Staraptor",
+    "Mega Garchomp Z",
+    "Mega Lucario Z",
+    "Mega Froslass",
+    "Mega Heatran",
+    "Mega Darkrai",
+    "Mega Emboar",
+    "Mega Excadrill",
+    "Mega Scolipede",
+    "Mega Scrafty",
+    "Mega Eelektross",
+    "Mega Chandelure",
+    "Mega Golurk",
+    "Mega Chesnaught",
+    "Mega Delphox",
+    "Mega Greninja",
+    "Mega Pyroar",
+    "Mega Floette",
+    "Mega Meowstic",
+    "Mega Malamar",
+    "Mega Barbaracle",
+    "Mega Dragalge",
+    "Mega Hawlucha",
+    "Mega Zygarde",
+    "Mega Crabominable",
+    "Mega Golisopod",
+    "Mega Drampa",
+    "Mega Magearna",
+    "Mega Zeraora",
+    "Mega Falinks",
+    "Mega Scovillain",
+    "Mega Glimmora",
+    "Mega Tatsugiri",
+    "Mega Baxcalibur",
+];
+
+async fn fetch_showdown_pokemon_names() -> Option<Vec<String>> {
+    let response = reqwest::get("https://play.pokemonshowdown.com/data/pokedex.json")
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let data = response.json::<Value>().await.ok()?;
+    Some(
+        data.as_object()?
+            .values()
+            .filter_map(|entry| entry.get("name").and_then(Value::as_str))
+            .map(str::to_owned)
+            .collect(),
+    )
+}
+
+async fn fetch_wikipedia_mega_names() -> Option<Vec<String>> {
+    let url = "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_generation_IX_Pok%C3%A9mon&prop=wikitext&format=json&origin=*";
+    let response = reqwest::get(url).await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let data = response.json::<Value>().await.ok()?;
+    let text = data
+        .get("parse")?
+        .get("wikitext")?
+        .get("*")?
+        .as_str()?;
+    Some(extract_mega_names(text))
+}
+
+fn extract_mega_names(text: &str) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    let bytes = text.as_bytes();
+    let mut index = 0;
+
+    while let Some(offset) = text[index..].find("Mega ") {
+        let start = index + offset;
+        let mut end = start + "Mega ".len();
+        while end < bytes.len() {
+            let ch = bytes[end] as char;
+            if ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '-' | ':') {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        let candidate = text[start..end]
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(|ch: char| !ch.is_ascii_alphanumeric());
+        if candidate.split_whitespace().count() <= 4 {
+            names.insert(candidate.to_owned());
+        }
+        index = end;
+    }
+
+    names.into_iter().collect()
 }
 
 async fn api_species_types(State(state): State<AppState>) -> Json<HashMap<String, Vec<String>>> {

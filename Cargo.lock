@@ -1462,6 +1462,15 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pkmn-dmg-lib"
 version = "0.1.0"
+source = "git+https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git?rev=515a8ff29cfd73e4f1efed91c2b999b1a3744b9c#515a8ff29cfd73e4f1efed91c2b999b1a3744b9c"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "pkmn-dmg-lib"
+version = "0.1.0"
 source = "git+https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git?rev=f415eb36b2899795e0908f9fb3ae1fae242a0968#f415eb36b2899795e0908f9fb3ae1fae242a0968"
 dependencies = [
  "serde",
@@ -2123,7 +2132,7 @@ source = "git+https://github.com/D35P4C1T0/SpreadLab.git?rev=5ca44b4#5ca44b446ba
 dependencies = [
  "anyhow",
  "clap",
- "pkmn-dmg-lib",
+ "pkmn-dmg-lib 0.1.0 (git+https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git?rev=f415eb36b2899795e0908f9fb3ae1fae242a0968)",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2140,7 +2149,7 @@ dependencies = [
  "leptos",
  "leptos_meta",
  "leptos_router",
- "pkmn-dmg-lib",
+ "pkmn-dmg-lib 0.1.0 (git+https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git?rev=515a8ff29cfd73e4f1efed91c2b999b1a3744b9c)",
  "reqwest",
  "serde",
  "serde_json",

@@ -18,7 +18,7 @@ leptos_router = { version = "0.8.6", features = ["ssr"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-damage_calc = { package = "pkmn-dmg-lib", git = "https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git", rev = "f415eb36b2899795e0908f9fb3ae1fae242a0968", features = ["serde"] }
+damage_calc = { package = "pkmn-dmg-lib", git = "https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git", rev = "515a8ff29cfd73e4f1efed91c2b999b1a3744b9c", features = ["serde"] }
 spreadlab-rs = { git = "https://github.com/D35P4C1T0/SpreadLab.git", rev = "5ca44b4" }
 thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }

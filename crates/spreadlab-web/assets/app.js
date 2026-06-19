@@ -27,6 +27,7 @@ let moveTypes = {
 };
 let speciesTypes = {};
 let speciesAbilities = {};
+let pokemonList = [];
 const storageKey = "spreadlab.webui.state.v1";
 let restoredState = null;
 
@@ -118,6 +119,10 @@ function rewriteCardSet(card) {
 function renderCard(card, parsed) {
   const name = card.querySelector('[data-field="name"]');
   if (name) name.innerHTML = `${parsed.name} <em>${card.dataset.setCard === "attacker" ? "♂" : "♀"}</em>`;
+  const selector = card.querySelector("[data-pokemon-selector]");
+  if (selector && document.activeElement !== selector) selector.value = parsed.name;
+  const choice = card.querySelector("[data-pokemon-choice]");
+  if (choice) choice.replaceChildren(document.createTextNode(parsed.name));
   renderTypes(card, parsed.name);
   card.querySelector('[data-field="ability"]')?.replaceChildren(document.createTextNode(parsed.ability));
   const abilityToggle = card.querySelector("[data-ability-toggle]");
@@ -149,7 +154,10 @@ function renderCard(card, parsed) {
   }
 
   const moves = card.querySelector('[data-field="moves"]');
-  if (moves && parsed.moves.length) {
+  if (moves) {
+    if (!parsed.moves.length) {
+      moves.innerHTML = `<div class="empty-moves">No moves selected</div>`;
+    } else {
     const moveInput = document.querySelector('[name="move_name"]');
     const selectedMove = card.dataset.setCard === "attacker" && parsed.moves.includes(moveInput?.value)
       ? moveInput.value
@@ -158,6 +166,7 @@ function renderCard(card, parsed) {
       `<button class="move ${move === selectedMove ? "selected" : ""}" type="button" data-move="${escapeAttr(move)}">${escapeHtml(move)} <span class="${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label></button>`
     ).join("");
     if (card.dataset.setCard === "attacker") setSelectedMove(selectedMove);
+    }
   }
 
   for (const [key] of statOrder) {
@@ -193,6 +202,15 @@ async function loadSpeciesAbilities() {
     if (!response.ok) return;
     const data = await response.json();
     speciesAbilities = Object.fromEntries(Object.entries(data).map(([name, abilities]) => [normalizeName(name), abilities]));
+  } catch (_) {}
+}
+
+async function loadPokemonList() {
+  try {
+    const response = await fetch("/api/pokemon-list");
+    if (!response.ok) return;
+    const data = await response.json();
+    pokemonList = [...new Set(data.filter(Boolean))].sort((a, b) => a.localeCompare(b));
   } catch (_) {}
 }
 
@@ -404,6 +422,169 @@ function initPersistentInputs() {
       autoRun();
     });
   });
+}
+
+function initPokemonSelectors() {
+  document.querySelectorAll("[data-pokemon-combobox]").forEach((combo) => {
+    const cardKey = combo.dataset.pokemonCombobox;
+    const input = combo.querySelector("[data-pokemon-selector]");
+    const choice = combo.querySelector(".pokemon-choice");
+    const menu = combo.querySelector("[data-pokemon-menu]");
+    const optionsNode = combo.querySelector("[data-pokemon-options]");
+    const renderOptions = (showAll = false) => renderPokemonOptions(input, optionsNode, showAll);
+    renderOptions(true);
+    choice?.addEventListener("click", () => {
+      input.value = choice.querySelector("[data-pokemon-choice]")?.textContent?.trim() || input.value;
+      renderOptions(true);
+      openPokemonMenu(choice, menu, input);
+    });
+    input?.addEventListener("input", () => {
+      renderOptions();
+      openPokemonMenu(choice, menu, input, false);
+    });
+    input?.addEventListener("keydown", (event) => {
+      const options = [...(optionsNode?.querySelectorAll("[data-pokemon-option]") || [])];
+      const active = optionsNode?.querySelector(".is-active");
+      const activeIndex = options.indexOf(active);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActivePokemonOption(options, Math.min(activeIndex + 1, options.length - 1));
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActivePokemonOption(options, Math.max(activeIndex - 1, 0));
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const best = active?.dataset.pokemonName || options[0]?.dataset.pokemonName;
+        if (best) {
+          applyPokemonSelection(cardKey, best);
+          closePokemonMenu(choice, menu);
+        }
+      } else if (event.key === "Escape") {
+        closePokemonMenu(choice, menu);
+      }
+    });
+    menu?.addEventListener("mousedown", (event) => {
+      const option = event.target.closest("[data-pokemon-option]");
+      if (!option) return;
+      event.preventDefault();
+      applyPokemonSelection(cardKey, option.dataset.pokemonName);
+      closePokemonMenu(choice, menu);
+    });
+    document.addEventListener("mousedown", (event) => {
+      if (!combo.contains(event.target)) closePokemonMenu(choice, menu);
+    });
+  });
+}
+
+function renderPokemonOptions(input, optionsNode, showAll = false) {
+  if (!input || !optionsNode) return;
+  const matches = fuzzyPokemonMatches(showAll ? "" : input.value, 24);
+  optionsNode.innerHTML = matches.length
+    ? matches.map(({ name }, index) => `<button class="pokemon-option ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join("")
+    : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
+}
+
+function openPokemonMenu(choice, menu, input, selectText = true) {
+  if (!menu) return;
+  choice?.setAttribute("aria-expanded", "true");
+  menu.classList.add("open");
+  if (input) {
+    requestAnimationFrame(() => {
+      input.focus();
+      if (selectText) input.select();
+    });
+  }
+}
+
+function closePokemonMenu(choice, menu) {
+  if (!menu) return;
+  choice?.setAttribute("aria-expanded", "false");
+  menu.classList.remove("open");
+}
+
+function setActivePokemonOption(options, index) {
+  options.forEach((option, optionIndex) => {
+    option.classList.toggle("is-active", optionIndex === index);
+  });
+  options[index]?.scrollIntoView({ block: "nearest" });
+}
+
+function fuzzyPokemonMatches(query, limit) {
+  const normalizedQuery = normalizeName(query);
+  const scored = pokemonList.map((name) => ({ name, score: fuzzyScore(normalizedQuery, normalizeName(name)) }))
+    .filter((entry) => entry.score !== null)
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+  return scored.slice(0, limit);
+}
+
+function fuzzyScore(query, candidate) {
+  if (!query) return 0;
+  if (candidate === query) return -1000;
+  if (candidate.startsWith(query)) return -500 + candidate.length - query.length;
+  if (candidate.includes(query)) return -250 + candidate.indexOf(query);
+  let last = -1;
+  let score = 0;
+  for (const char of query) {
+    const index = candidate.indexOf(char, last + 1);
+    if (index < 0) return null;
+    score += index - last;
+    last = index;
+  }
+  return score + candidate.length;
+}
+
+function applyPokemonSelection(cardKey, rawName) {
+  const card = document.querySelector(`[data-set-card="${cardKey}"]`);
+  const editor = card?.querySelector(".raw-editor");
+  if (!card || !editor) return;
+
+  const selected = pokemonList.find((name) => normalizeName(name) === normalizeName(rawName));
+  if (!selected) return;
+  const previous = parseSet(editor.value).name;
+  const selector = card.querySelector("[data-pokemon-selector]");
+  const choice = card.querySelector("[data-pokemon-choice]");
+  if (selector) selector.value = selected;
+  if (choice) choice.replaceChildren(document.createTextNode(selected));
+  if (normalizeName(previous) === normalizeName(selected)) return;
+
+  resetCardTraining(card);
+  resetCardBoosts(card);
+  clearCardMoves(card);
+  editor.value = buildBlankPokemonSet(card, selected);
+  syncRawEditor(editor);
+  saveState();
+  autoRun();
+}
+
+function buildBlankPokemonSet(card, name) {
+  const ability = primaryAbility(name) || "None";
+  const nature = card.querySelector("[data-card-nature]")?.value || "Hardy";
+  const natureLine = nature && nature !== "Any" ? nature : "Hardy";
+  return `${name}\nAbility: ${ability}\n${natureLine} Nature\nSPs: 0 HP`;
+}
+
+function resetCardTraining(card) {
+  card.querySelectorAll("[data-sp-key]").forEach((input) => {
+    input.value = "0";
+  });
+}
+
+function resetCardBoosts(card) {
+  card.querySelectorAll("[data-boost-key]").forEach((input) => {
+    if (input.disabled) return;
+    input.value = "0";
+    delete input.dataset.auto;
+    delete input.dataset.base;
+  });
+}
+
+function clearCardMoves(card) {
+  const moves = card.querySelector('[data-field="moves"]');
+  if (moves) moves.innerHTML = `<div class="empty-moves">No moves selected</div>`;
+  if (card.dataset.setCard === "attacker") {
+    const moveInput = document.querySelector('[name="move_name"]');
+    if (moveInput) moveInput.value = "";
+  }
 }
 
 function initSwap() {
@@ -883,10 +1064,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadMoveTypes();
   await loadSpeciesTypes();
   await loadSpeciesAbilities();
+  await loadPokemonList();
   initShare();
   initRun();
   initToggles();
   initPersistentInputs();
+  initPokemonSelectors();
   initSpBoxes();
   initBoostBoxes();
   initAbilityToggles();
