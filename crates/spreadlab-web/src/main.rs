@@ -112,6 +112,7 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .route("/api/item-sprite/:name", get(api_item_sprite))
         .route("/api/move-types", get(api_move_types))
         .route("/api/pokemon-list", get(api_pokemon_list))
+        .route("/api/item-list", get(api_item_list))
         .route("/api/species-types", get(api_species_types))
         .route("/api/species-abilities", get(api_species_abilities))
         .route("/api/unsupported-items", get(api_unsupported_items))
@@ -322,6 +323,16 @@ async fn api_pokemon_list(State(state): State<AppState>) -> Json<Vec<String>> {
     Json(names.into_iter().collect())
 }
 
+async fn api_item_list(State(state): State<AppState>) -> Json<Vec<String>> {
+    let mut names = state
+        .data
+        .item_names()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    names.insert("None".to_owned());
+    Json(names.into_iter().collect())
+}
+
 const ZA_MEGA_FALLBACKS: &[&str] = &[
     "Mega Raichu",
     "Mega Raichu X",
@@ -395,11 +406,7 @@ async fn fetch_wikipedia_mega_names() -> Option<Vec<String>> {
         return None;
     }
     let data = response.json::<Value>().await.ok()?;
-    let text = data
-        .get("parse")?
-        .get("wikitext")?
-        .get("*")?
-        .as_str()?;
+    let text = data.get("parse")?.get("wikitext")?.get("*")?.as_str()?;
     Some(extract_mega_names(text))
 }
 

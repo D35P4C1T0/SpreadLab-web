@@ -28,6 +28,7 @@ let moveTypes = {
 let speciesTypes = {};
 let speciesAbilities = {};
 let pokemonList = [];
+let itemList = [];
 const storageKey = "spreadlab.webui.state.v1";
 let restoredState = null;
 
@@ -123,6 +124,10 @@ function renderCard(card, parsed) {
   if (selector && document.activeElement !== selector) selector.value = parsed.name;
   const choice = card.querySelector("[data-pokemon-choice]");
   if (choice) choice.replaceChildren(document.createTextNode(parsed.name));
+  const itemSelector = card.querySelector("[data-item-selector]");
+  if (itemSelector && document.activeElement !== itemSelector) itemSelector.value = parsed.item;
+  const itemChoice = card.querySelector("[data-item-choice]");
+  if (itemChoice) itemChoice.replaceChildren(document.createTextNode(parsed.item));
   renderTypes(card, parsed.name);
   card.querySelector('[data-field="ability"]')?.replaceChildren(document.createTextNode(parsed.ability));
   const abilityToggle = card.querySelector("[data-ability-toggle]");
@@ -211,6 +216,15 @@ async function loadPokemonList() {
     if (!response.ok) return;
     const data = await response.json();
     pokemonList = [...new Set(data.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  } catch (_) {}
+}
+
+async function loadItemList() {
+  try {
+    const response = await fetch("/api/item-list");
+    if (!response.ok) return;
+    const data = await response.json();
+    itemList = [...new Set(data.filter(Boolean))].sort((a, b) => a.localeCompare(b));
   } catch (_) {}
 }
 
@@ -476,11 +490,71 @@ function initPokemonSelectors() {
   });
 }
 
+function initItemSelectors() {
+  document.querySelectorAll("[data-item-combobox]").forEach((combo) => {
+    const cardKey = combo.dataset.itemCombobox;
+    const input = combo.querySelector("[data-item-selector]");
+    const choice = combo.querySelector(".item-choice");
+    const menu = combo.querySelector("[data-item-menu]");
+    const optionsNode = combo.querySelector("[data-item-options]");
+    const renderOptions = (showAll = false) => renderItemOptions(input, optionsNode, showAll);
+    renderOptions(true);
+    choice?.addEventListener("click", () => {
+      input.value = choice.querySelector("[data-item-choice]")?.textContent?.trim() || input.value;
+      renderOptions(true);
+      openPokemonMenu(choice, menu, input);
+    });
+    input?.addEventListener("input", () => {
+      renderOptions();
+      openPokemonMenu(choice, menu, input, false);
+    });
+    input?.addEventListener("keydown", (event) => {
+      const options = [...(optionsNode?.querySelectorAll("[data-item-option]") || [])];
+      const active = optionsNode?.querySelector(".is-active");
+      const activeIndex = options.indexOf(active);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActivePokemonOption(options, Math.min(activeIndex + 1, options.length - 1));
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActivePokemonOption(options, Math.max(activeIndex - 1, 0));
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const best = active?.dataset.itemName || options[0]?.dataset.itemName;
+        if (best) {
+          applyItemSelection(cardKey, best);
+          closePokemonMenu(choice, menu);
+        }
+      } else if (event.key === "Escape") {
+        closePokemonMenu(choice, menu);
+      }
+    });
+    menu?.addEventListener("mousedown", (event) => {
+      const option = event.target.closest("[data-item-option]");
+      if (!option) return;
+      event.preventDefault();
+      applyItemSelection(cardKey, option.dataset.itemName);
+      closePokemonMenu(choice, menu);
+    });
+    document.addEventListener("mousedown", (event) => {
+      if (!combo.contains(event.target)) closePokemonMenu(choice, menu);
+    });
+  });
+}
+
 function renderPokemonOptions(input, optionsNode, showAll = false) {
   if (!input || !optionsNode) return;
   const matches = fuzzyPokemonMatches(showAll ? "" : input.value, 24);
   optionsNode.innerHTML = matches.length
     ? matches.map(({ name }, index) => `<button class="pokemon-option ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join("")
+    : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
+}
+
+function renderItemOptions(input, optionsNode, showAll = false) {
+  if (!input || !optionsNode) return;
+  const matches = fuzzyItemMatches(showAll ? "" : input.value, 24);
+  optionsNode.innerHTML = matches.length
+    ? matches.map(({ name }, index) => `<button class="pokemon-option ${index === 0 ? "is-active" : ""}" type="button" role="option" data-item-option data-item-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join("")
     : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
 }
 
@@ -512,6 +586,14 @@ function setActivePokemonOption(options, index) {
 function fuzzyPokemonMatches(query, limit) {
   const normalizedQuery = normalizeName(query);
   const scored = pokemonList.map((name) => ({ name, score: fuzzyScore(normalizedQuery, normalizeName(name)) }))
+    .filter((entry) => entry.score !== null)
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+  return scored.slice(0, limit);
+}
+
+function fuzzyItemMatches(query, limit) {
+  const normalizedQuery = normalizeName(query);
+  const scored = itemList.map((name) => ({ name, score: fuzzyScore(normalizedQuery, normalizeName(name)) }))
     .filter((entry) => entry.score !== null)
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
   return scored.slice(0, limit);
@@ -554,6 +636,31 @@ function applyPokemonSelection(cardKey, rawName) {
   syncRawEditor(editor);
   saveState();
   autoRun();
+}
+
+function applyItemSelection(cardKey, rawName) {
+  const card = document.querySelector(`[data-set-card="${cardKey}"]`);
+  const editor = card?.querySelector(".raw-editor");
+  if (!card || !editor) return;
+
+  const selected = itemList.find((name) => normalizeName(name) === normalizeName(rawName));
+  if (!selected) return;
+  const selector = card.querySelector("[data-item-selector]");
+  const choice = card.querySelector("[data-item-choice]");
+  if (selector) selector.value = selected;
+  if (choice) choice.replaceChildren(document.createTextNode(selected));
+
+  editor.value = setFirstLineItem(editor.value, selected);
+  syncRawEditor(editor);
+  saveState();
+  autoRun();
+}
+
+function setFirstLineItem(text, item) {
+  const lines = text.split(/\r?\n/);
+  const [rawName = "Unknown"] = (lines[0] || "Unknown").split("@").map((part) => part.trim());
+  lines[0] = normalizeName(item) === "none" ? rawName : `${rawName} @ ${item}`;
+  return lines.join("\n");
 }
 
 function buildBlankPokemonSet(card, name) {
@@ -1065,11 +1172,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadSpeciesTypes();
   await loadSpeciesAbilities();
   await loadPokemonList();
+  await loadItemList();
   initShare();
   initRun();
   initToggles();
   initPersistentInputs();
   initPokemonSelectors();
+  initItemSelectors();
   initSpBoxes();
   initBoostBoxes();
   initAbilityToggles();
