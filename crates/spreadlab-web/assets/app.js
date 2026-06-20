@@ -29,6 +29,85 @@ let speciesTypes = {};
 let speciesAbilities = {};
 let pokemonList = [];
 let itemList = [];
+let pokemonSearchList = [];
+let itemSearchList = [];
+const megaStonePokemon = Object.freeze({
+  Abomasite: "Mega Abomasnow",
+  Absolite: "Mega Absol",
+  Aerodactylite: "Mega Aerodactyl",
+  Aggronite: "Mega Aggron",
+  Alakazite: "Mega Alakazam",
+  Altarianite: "Mega Altaria",
+  Ampharosite: "Mega Ampharos",
+  Audinite: "Mega Audino",
+  Banettite: "Mega Banette",
+  Barbaracleite: "Mega Barbaracle",
+  Beedrillite: "Mega Beedrill",
+  Blastoisinite: "Mega Blastoise",
+  Blazikenite: "Mega Blaziken",
+  Cameruptite: "Mega Camerupt",
+  Chandelurite: "Mega Chandelure",
+  "Charizardite X": "Mega Charizard X",
+  "Charizardite Y": "Mega Charizard Y",
+  Chesnaughtite: "Mega Chesnaught",
+  Chimechite: "Mega Chimecho",
+  Clefablite: "Mega Clefable",
+  Crabominite: "Mega Crabominable",
+  Delphoxite: "Mega Delphox",
+  Dragalgeite: "Mega Dragalge",
+  Dragoninite: "Mega Dragonite",
+  Drampanite: "Mega Drampa",
+  Eelektrossite: "Mega Eelektross",
+  Emboarite: "Mega Emboar",
+  Excadrite: "Mega Excadrill",
+  Falinksite: "Mega Falinks",
+  Feraligite: "Mega Feraligatr",
+  Floettite: "Mega Floette",
+  Froslassite: "Mega Froslass",
+  Galladite: "Mega Gallade",
+  Garchompite: "Mega Garchomp",
+  Gardevoirite: "Mega Gardevoir",
+  Gengarite: "Mega Gengar",
+  Glalitite: "Mega Glalie",
+  Glimmoranite: "Mega Glimmora",
+  Golurkite: "Mega Golurk",
+  Greninjite: "Mega Greninja",
+  Gyaradosite: "Mega Gyarados",
+  Hawluchanite: "Mega Hawlucha",
+  Heracronite: "Mega Heracross",
+  Houndoominite: "Mega Houndoom",
+  Kangaskhanite: "Mega Kangaskhan",
+  Lopunnite: "Mega Lopunny",
+  Lucarionite: "Mega Lucario",
+  Malamarite: "Mega Malamar",
+  Manectite: "Mega Manectric",
+  Mawileite: "Mega Mawile",
+  Medichamite: "Mega Medicham",
+  Meganiumite: "Mega Meganium",
+  Meowsticite: "Mega Meowstic",
+  Metagrossite: "Mega Metagross",
+  Pidgeotite: "Mega Pidgeot",
+  Pinsirite: "Mega Pinsir",
+  Pyroarite: "Mega Pyroar",
+  "Raichunite X": "Mega Raichu X",
+  "Raichunite Y": "Mega Raichu Y",
+  Sablenite: "Mega Sableye",
+  Sceptileite: "Mega Sceptile",
+  Scizorite: "Mega Scizor",
+  Scolipedeite: "Mega Scolipede",
+  Scovillainite: "Mega Scovillain",
+  Scraftyite: "Mega Scrafty",
+  Sharpedonite: "Mega Sharpedo",
+  Skarmorite: "Mega Skarmory",
+  Slowbronite: "Mega Slowbro",
+  Staraptorite: "Mega Staraptor",
+  Starminite: "Mega Starmie",
+  Steelixite: "Mega Steelix",
+  Swampertite: "Mega Swampert",
+  Tyranitarite: "Mega Tyranitar",
+  Venusaurite: "Mega Venusaur",
+  Victreebelite: "Mega Victreebel",
+});
 const storageKey = "spreadlab.webui.state.v1";
 let restoredState = null;
 
@@ -215,7 +294,7 @@ async function loadPokemonList() {
     const response = await fetch("/api/pokemon-list");
     if (!response.ok) return;
     const data = await response.json();
-    pokemonList = [...new Set(data.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    setPokemonList(data);
   } catch (_) {}
 }
 
@@ -224,8 +303,22 @@ async function loadItemList() {
     const response = await fetch("/api/item-list");
     if (!response.ok) return;
     const data = await response.json();
-    itemList = [...new Set(data.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    setItemList(data);
   } catch (_) {}
+}
+
+function setPokemonList(data) {
+  pokemonList = sortedUniqueNames(data);
+  pokemonSearchList = pokemonList.map((name) => ({ name, key: normalizeName(name) }));
+}
+
+function setItemList(data) {
+  itemList = sortedUniqueNames(data);
+  itemSearchList = itemList.map((name) => ({ name, key: normalizeName(name) }));
+}
+
+function sortedUniqueNames(data) {
+  return [...new Set(data.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 function primaryAbility(name) {
@@ -545,6 +638,9 @@ function initItemSelectors() {
 function renderPokemonOptions(input, optionsNode, showAll = false) {
   if (!input || !optionsNode) return;
   const matches = fuzzyPokemonMatches(showAll ? "" : input.value, 24);
+  const renderKey = `pokemon:${matches.map(({ name }) => name).join("\u0000")}`;
+  if (optionsNode.dataset.renderKey === renderKey) return;
+  optionsNode.dataset.renderKey = renderKey;
   optionsNode.innerHTML = matches.length
     ? matches.map(({ name }, index) => `<button class="pokemon-option ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join("")
     : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
@@ -553,6 +649,9 @@ function renderPokemonOptions(input, optionsNode, showAll = false) {
 function renderItemOptions(input, optionsNode, showAll = false) {
   if (!input || !optionsNode) return;
   const matches = fuzzyItemMatches(showAll ? "" : input.value, 24);
+  const renderKey = `item:${matches.map(({ name }) => name).join("\u0000")}`;
+  if (optionsNode.dataset.renderKey === renderKey) return;
+  optionsNode.dataset.renderKey = renderKey;
   optionsNode.innerHTML = matches.length
     ? matches.map(({ name }, index) => `<button class="pokemon-option ${index === 0 ? "is-active" : ""}" type="button" role="option" data-item-option data-item-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join("")
     : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
@@ -584,16 +683,17 @@ function setActivePokemonOption(options, index) {
 }
 
 function fuzzyPokemonMatches(query, limit) {
-  const normalizedQuery = normalizeName(query);
-  const scored = pokemonList.map((name) => ({ name, score: fuzzyScore(normalizedQuery, normalizeName(name)) }))
-    .filter((entry) => entry.score !== null)
-    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
-  return scored.slice(0, limit);
+  return fuzzyMatches(pokemonSearchList, query, limit);
 }
 
 function fuzzyItemMatches(query, limit) {
+  return fuzzyMatches(itemSearchList, query, limit);
+}
+
+function fuzzyMatches(entries, query, limit) {
   const normalizedQuery = normalizeName(query);
-  const scored = itemList.map((name) => ({ name, score: fuzzyScore(normalizedQuery, normalizeName(name)) }))
+  if (!normalizedQuery) return entries.slice(0, limit).map(({ name }) => ({ name, score: 0 }));
+  const scored = entries.map(({ name, key }) => ({ name, score: fuzzyScore(normalizedQuery, key) }))
     .filter((entry) => entry.score !== null)
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
   return scored.slice(0, limit);
@@ -632,7 +732,10 @@ function applyPokemonSelection(cardKey, rawName) {
   resetCardTraining(card);
   resetCardBoosts(card);
   clearCardMoves(card);
-  editor.value = buildBlankPokemonSet(card, selected);
+  let nextSet = buildBlankPokemonSet(card, selected);
+  const megaStone = megaStoneForPokemon(selected);
+  if (megaStone) nextSet = setFirstLineItem(nextSet, megaStone);
+  editor.value = nextSet;
   syncRawEditor(editor);
   saveState();
   autoRun();
@@ -661,6 +764,31 @@ function setFirstLineItem(text, item) {
   const [rawName = "Unknown"] = (lines[0] || "Unknown").split("@").map((part) => part.trim());
   lines[0] = normalizeName(item) === "none" ? rawName : `${rawName} @ ${item}`;
   return lines.join("\n");
+}
+
+function megaStoneForPokemon(name) {
+  const selectedKey = normalizeMegaPokemonKey(name);
+  for (const [stone, pokemon] of Object.entries(megaStonePokemon)) {
+    const matches = megaPokemonNameVariants(pokemon).some(
+      (variant) => normalizeMegaPokemonKey(variant) === selectedKey,
+    );
+    if (matches) {
+      return stone;
+    }
+  }
+  return null;
+}
+
+function megaPokemonNameVariants(pokemon) {
+  const variants = [pokemon];
+  const splitMega = pokemon.match(/^Mega (.+) ([XY])$/);
+  if (splitMega) variants.push(`${splitMega[1]}-Mega-${splitMega[2]}`);
+  else if (pokemon.startsWith("Mega ")) variants.push(`${pokemon.slice(5)}-Mega`);
+  return variants;
+}
+
+function normalizeMegaPokemonKey(name) {
+  return normalizeName(name).replace(/z$/, "");
 }
 
 function buildBlankPokemonSet(card, name) {
@@ -829,10 +957,17 @@ function collectState() {
   };
 }
 
-function saveState() {
+let saveStateTimer = null;
+
+function saveStateNow() {
   try {
     localStorage.setItem(storageKey, JSON.stringify(collectState()));
   } catch (_) {}
+}
+
+function saveState() {
+  clearTimeout(saveStateTimer);
+  saveStateTimer = setTimeout(saveStateNow, 120);
 }
 
 function restoreState() {
@@ -1168,11 +1303,13 @@ function megaAlias(value) {
 
 document.addEventListener("DOMContentLoaded", async () => {
   restoreState();
-  await loadMoveTypes();
-  await loadSpeciesTypes();
-  await loadSpeciesAbilities();
-  await loadPokemonList();
-  await loadItemList();
+  await Promise.all([
+    loadMoveTypes(),
+    loadSpeciesTypes(),
+    loadSpeciesAbilities(),
+    loadPokemonList(),
+    loadItemList(),
+  ]);
   initShare();
   initRun();
   initToggles();
@@ -1190,3 +1327,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   initMoves();
   initSwap();
 });
+
+window.addEventListener("pagehide", saveStateNow);

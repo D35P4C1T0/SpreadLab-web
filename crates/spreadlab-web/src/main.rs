@@ -15,7 +15,8 @@ use std::{
     collections::{BTreeSet, HashMap},
     net::SocketAddr,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, OnceLock},
+    time::Duration,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -44,6 +45,160 @@ enum Command {
 struct AppState {
     data: Arc<ChampionsData>,
 }
+
+static POKEAPI_SPECIES_NAMES: OnceLock<Vec<String>> = OnceLock::new();
+static POKEAPI_POKEMON_NAMES: OnceLock<Vec<String>> = OnceLock::new();
+
+const POKEMON_CHAMPIONS_ITEMS: &[&str] = &[
+    "Abomasite",
+    "Absolite",
+    "Aerodactylite",
+    "Aggronite",
+    "Alakazite",
+    "Altarianite",
+    "Ampharosite",
+    "Aspear Berry",
+    "Audinite",
+    "Babiri Berry",
+    "Banettite",
+    "Barbaracleite",
+    "Beedrillite",
+    "Big Root",
+    "Black Belt",
+    "Black Glasses",
+    "Blastoisinite",
+    "Blazikenite",
+    "BrightPowder",
+    "Cameruptite",
+    "Chandelurite",
+    "Charcoal",
+    "Charizardite X",
+    "Charizardite Y",
+    "Charti Berry",
+    "Cheri Berry",
+    "Chesnaughtite",
+    "Chesto Berry",
+    "Chilan Berry",
+    "Chimechite",
+    "Choice Scarf",
+    "Chople Berry",
+    "Clefablite",
+    "Coba Berry",
+    "Colbur Berry",
+    "Crabominite",
+    "Damp Rock",
+    "Delphoxite",
+    "Dragalgeite",
+    "Dragon Fang",
+    "Dragoninite",
+    "Drampanite",
+    "Eelektrossite",
+    "Emboarite",
+    "Excadrite",
+    "Expert Belt",
+    "Fairy Feather",
+    "Falinksite",
+    "Feraligite",
+    "Floettite",
+    "Focus Band",
+    "Focus Sash",
+    "Froslassite",
+    "Galladite",
+    "Garchompite",
+    "Gardevoirite",
+    "Gengarite",
+    "Glalitite",
+    "Glimmoranite",
+    "Golurkite",
+    "Greninjite",
+    "Gyaradosite",
+    "Haban Berry",
+    "Hard Stone",
+    "Hawluchanite",
+    "Heat Rock",
+    "Heracronite",
+    "Houndoominite",
+    "Icy Rock",
+    "Iron Ball",
+    "Kangaskhanite",
+    "Kasib Berry",
+    "Kebia Berry",
+    "King's Rock",
+    "Leftovers",
+    "Leppa Berry",
+    "Life Orb",
+    "Light Ball",
+    "Light Clay",
+    "Lopunnite",
+    "Lucarionite",
+    "Lum Berry",
+    "Magnet",
+    "Malamarite",
+    "Manectite",
+    "Mawileite",
+    "Medichamite",
+    "Meganiumite",
+    "Mental Herb",
+    "Meowsticite",
+    "Metagrossite",
+    "Metal Coat",
+    "Metronome",
+    "Miracle Seed",
+    "Muscle Band",
+    "Mystic Water",
+    "Never-Melt Ice",
+    "Occa Berry",
+    "Oran Berry",
+    "Passho Berry",
+    "Payapa Berry",
+    "Pecha Berry",
+    "Persim Berry",
+    "Pidgeotite",
+    "Pinsirite",
+    "Poison Barb",
+    "Pyroarite",
+    "Quick Claw",
+    "Raichunite X",
+    "Raichunite Y",
+    "Rawst Berry",
+    "Rindo Berry",
+    "Roseli Berry",
+    "Sablenite",
+    "Sceptileite",
+    "Scizorite",
+    "Scolipedeite",
+    "Scope Lens",
+    "Scovillainite",
+    "Scraftyite",
+    "Sharp Beak",
+    "Sharpedonite",
+    "Shed Shell",
+    "Shell Bell",
+    "Shuca Berry",
+    "Silk Scarf",
+    "SilverPowder",
+    "Sitrus Berry",
+    "Skarmorite",
+    "Slowbronite",
+    "Smooth Rock",
+    "Soft Sand",
+    "Spell Tag",
+    "Staraptorite",
+    "Starminite",
+    "Steelixite",
+    "Swampertite",
+    "Tanga Berry",
+    "TwistedSpoon",
+    "Tyranitarite",
+    "Venusaurite",
+    "Victreebelite",
+    "Wacan Berry",
+    "White Herb",
+    "Wide Lens",
+    "Wise Glasses",
+    "Yache Berry",
+    "Zoom Lens",
+];
 
 const TRANSPARENT_PNG: &[u8] = &[
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
@@ -272,7 +427,7 @@ async fn api_meta(State(state): State<AppState>) -> Result<Json<api::MetadataRes
         let mut response = api::MetadataResponse {
             species: data.species_names().map(str::to_owned).collect(),
             regulation: data.regulation_m_b_names().map(str::to_owned).collect(),
-            items: data.item_names().map(str::to_owned).collect(),
+            items: pokemon_champions_item_names().map(str::to_owned).collect(),
             abilities: data.ability_names().map(str::to_owned).collect(),
             moves: data.move_names().map(str::to_owned).collect(),
         };
@@ -312,21 +467,19 @@ async fn api_pokemon_list(State(state): State<AppState>) -> Json<Vec<String>> {
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
 
-    if let Some(showdown) = fetch_showdown_pokemon_names().await {
-        names.extend(showdown);
-    }
-    if let Some(mega_names) = fetch_wikipedia_mega_names().await {
-        names.extend(mega_names);
-    }
+    let (species_names, pokemon_names) = tokio::join!(
+        cached_pokeapi_species_names(),
+        cached_pokeapi_pokemon_names()
+    );
+    names.extend(species_names);
+    names.extend(pokemon_names);
     names.extend(ZA_MEGA_FALLBACKS.iter().map(|name| (*name).to_owned()));
 
     Json(names.into_iter().collect())
 }
 
-async fn api_item_list(State(state): State<AppState>) -> Json<Vec<String>> {
-    let mut names = state
-        .data
-        .item_names()
+async fn api_item_list(State(_state): State<AppState>) -> Json<Vec<String>> {
+    let mut names = pokemon_champions_item_names()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     names.insert("None".to_owned());
@@ -382,63 +535,83 @@ const ZA_MEGA_FALLBACKS: &[&str] = &[
     "Mega Baxcalibur",
 ];
 
-async fn fetch_showdown_pokemon_names() -> Option<Vec<String>> {
-    let response = reqwest::get("https://play.pokemonshowdown.com/data/pokedex.json")
+#[derive(Deserialize)]
+struct PokeApiResourceList {
+    results: Vec<PokeApiNamedResource>,
+}
+
+#[derive(Deserialize)]
+struct PokeApiNamedResource {
+    name: String,
+}
+
+async fn fetch_pokeapi_resource_names(resource: &str) -> Option<Vec<String>> {
+    let url = format!("https://pokeapi.co/api/v2/{resource}?limit=100000&offset=0");
+    let response = tokio::time::timeout(Duration::from_millis(1500), reqwest::get(url))
         .await
+        .ok()?
         .ok()?;
     if !response.status().is_success() {
         return None;
     }
-    let data = response.json::<Value>().await.ok()?;
+    let data = response.json::<PokeApiResourceList>().await.ok()?;
     Some(
-        data.as_object()?
-            .values()
-            .filter_map(|entry| entry.get("name").and_then(Value::as_str))
-            .map(str::to_owned)
+        data.results
+            .into_iter()
+            .map(|entry| pokeapi_resource_display_name(&entry.name))
             .collect(),
     )
 }
 
-async fn fetch_wikipedia_mega_names() -> Option<Vec<String>> {
-    let url = "https://en.wikipedia.org/w/api.php?action=parse&page=List_of_generation_IX_Pok%C3%A9mon&prop=wikitext&format=json&origin=*";
-    let response = reqwest::get(url).await.ok()?;
-    if !response.status().is_success() {
-        return None;
+async fn cached_pokeapi_species_names() -> Vec<String> {
+    if let Some(names) = POKEAPI_SPECIES_NAMES.get() {
+        return names.clone();
     }
-    let data = response.json::<Value>().await.ok()?;
-    let text = data.get("parse")?.get("wikitext")?.get("*")?.as_str()?;
-    Some(extract_mega_names(text))
+    let names = fetch_pokeapi_resource_names("pokemon-species")
+        .await
+        .unwrap_or_default();
+    let _ = POKEAPI_SPECIES_NAMES.set(names);
+    POKEAPI_SPECIES_NAMES.get().cloned().unwrap_or_default()
 }
 
-fn extract_mega_names(text: &str) -> Vec<String> {
-    let mut names = BTreeSet::new();
-    let bytes = text.as_bytes();
-    let mut index = 0;
-
-    while let Some(offset) = text[index..].find("Mega ") {
-        let start = index + offset;
-        let mut end = start + "Mega ".len();
-        while end < bytes.len() {
-            let ch = bytes[end] as char;
-            if ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '-' | ':') {
-                end += 1;
-            } else {
-                break;
-            }
-        }
-        let candidate = text[start..end]
-            .split(':')
-            .next()
-            .unwrap_or("")
-            .trim()
-            .trim_end_matches(|ch: char| !ch.is_ascii_alphanumeric());
-        if candidate.split_whitespace().count() <= 4 {
-            names.insert(candidate.to_owned());
-        }
-        index = end;
+async fn cached_pokeapi_pokemon_names() -> Vec<String> {
+    if let Some(names) = POKEAPI_POKEMON_NAMES.get() {
+        return names.clone();
     }
+    let names = fetch_pokeapi_resource_names("pokemon")
+        .await
+        .unwrap_or_default();
+    let _ = POKEAPI_POKEMON_NAMES.set(names);
+    POKEAPI_POKEMON_NAMES.get().cloned().unwrap_or_default()
+}
 
-    names.into_iter().collect()
+fn pokeapi_resource_display_name(name: &str) -> String {
+    let parts = name.split('-').collect::<Vec<_>>();
+    if let Some(mega_index) = parts.iter().position(|part| *part == "mega") {
+        let base = title_segments(&parts[..mega_index], " ");
+        let suffix = title_segments(&parts[mega_index + 1..], " ");
+        return if suffix.is_empty() {
+            format!("Mega {base}")
+        } else {
+            format!("Mega {base} {suffix}")
+        };
+    }
+    title_segments(&parts, "-")
+}
+
+fn title_segments(parts: &[&str], separator: &str) -> String {
+    parts
+        .iter()
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(separator)
 }
 
 async fn api_species_types(State(state): State<AppState>) -> Json<HashMap<String, Vec<String>>> {
@@ -497,13 +670,17 @@ async fn api_unsupported_items(State(state): State<AppState>) -> Json<Vec<String
 }
 
 fn unsupported_item_names(data: &ChampionsData) -> Vec<String> {
-    let mut items = data
-        .item_names()
+    let _ = data;
+    let mut items = pokemon_champions_item_names()
         .filter(|item| spreadlab_rs::data::parse_item(item).is_err())
         .map(str::to_owned)
         .collect::<Vec<_>>();
     items.sort();
     items
+}
+
+fn pokemon_champions_item_names() -> impl Iterator<Item = &'static str> {
+    POKEMON_CHAMPIONS_ITEMS.iter().copied()
 }
 
 async fn api_damage(
@@ -1365,18 +1542,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_damage_lib_champions_items_are_supported_by_spreadlab_parser() {
+    fn pokemon_champions_item_catalog_contains_recent_items() {
+        let items = pokemon_champions_item_names().collect::<BTreeSet<_>>();
+
+        for item in ["Choice Scarf", "Garchompite", "Barbaracleite"] {
+            assert!(
+                items.contains(item),
+                "{item} missing from item selector catalog"
+            );
+        }
+    }
+
+    #[test]
+    fn pokemon_champions_item_catalog_has_no_duplicates() {
+        let item_count = pokemon_champions_item_names().count();
+        let unique_count = pokemon_champions_item_names()
+            .collect::<BTreeSet<_>>()
+            .len();
+
+        assert_eq!(item_count, unique_count);
+    }
+
+    #[test]
+    fn pokeapi_resource_names_are_display_names() {
+        assert_eq!(
+            pokeapi_resource_display_name("charizard-mega-x"),
+            "Mega Charizard X"
+        );
+        assert_eq!(pokeapi_resource_display_name("mr-mime"), "Mr-Mime");
+        assert_eq!(
+            pokeapi_resource_display_name("giratina-origin"),
+            "Giratina-Origin"
+        );
+    }
+
+    #[test]
+    fn champions_item_catalog_is_supported_by_spreadlab_parser() {
         let data = ChampionsData::load().expect("Champions data loads");
         assert_eq!(unsupported_item_names(&data), Vec::<String>::new());
     }
 
     #[test]
-    fn neutral_unsupported_items_are_removed_before_core_parse() {
+    fn newly_supported_neutral_items_are_preserved_for_core_parse() {
         let normalized = normalize_showdown_set(
             "Kingambit @ Shed Shell\nAbility: Defiant\nAdamant Nature\n- Iron Head",
         );
-        assert!(normalized.starts_with("Kingambit\n"));
-        assert!(!normalized.contains("Shed Shell"));
+        assert!(normalized.starts_with("Kingambit @ Shed Shell\n"));
     }
 
     #[test]
