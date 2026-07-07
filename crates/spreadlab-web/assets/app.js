@@ -352,6 +352,15 @@ function setSelectedMove(moveName) {
   document.querySelectorAll(".move").forEach((node) => {
     node.classList.toggle("selected", node.dataset.move === moveName);
   });
+  syncMoveEffectField(moveName);
+}
+
+function syncMoveEffectField(moveName) {
+  const field = document.querySelector(".effect-field");
+  const input = document.querySelector('[name="move_times_affected"]');
+  const show = normalizeName(moveName) === "lastrespects";
+  if (field) field.hidden = !show;
+  if (input && !show) input.value = "0";
 }
 
 function syncRawEditor(editor) {
@@ -522,7 +531,7 @@ function initMoves() {
 }
 
 function initPersistentInputs() {
-  document.querySelectorAll('[name="hp_percent"], [name="max_ko_chance"], [name="min_ko_chance"], [name="limit"], [name="hit_goal"]').forEach((input) => {
+  document.querySelectorAll('[name="hp_percent"], [name="max_ko_chance"], [name="min_ko_chance"], [name="limit"], [name="hit_goal"], [data-move-effect-count]').forEach((input) => {
     input.addEventListener("input", saveState);
     input.addEventListener("change", () => {
       saveState();
@@ -865,7 +874,7 @@ function currentPayload() {
     attacker_set: setWithStatus(setWithAbilityState(document.querySelector('[name="attacker_set"]')?.value || "", "attacker"), "attacker"),
     defender_set: setWithStatus(setWithAbilityState(document.querySelector('[name="defender_set"]')?.value || "", "defender"), "defender"),
     move_name: document.querySelector('[name="move_name"]')?.value || "",
-    move_times_affected: 0,
+    move_times_affected: moveEffectCount("move_times_affected"),
     critical: selectedCrit(),
     field: fieldPayload(),
   };
@@ -916,6 +925,12 @@ function number(name, fallback) {
   return Number(document.querySelector(`[name="${name}"]`)?.value || fallback);
 }
 
+function moveEffectCount(name) {
+  const value = Number(document.querySelector(`[name="${name}"]`)?.value || 0);
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(6, Math.round(value)));
+}
+
 function koChance(name, fallbackRolls) {
   const rolls = Number(document.querySelector(`[name="${name}"]`)?.value || fallbackRolls);
   return Math.max(0, Math.min(16, rolls)) / 16;
@@ -935,6 +950,7 @@ function collectState() {
     attackerTypes: cardTypes("attacker"),
     defenderTypes: cardTypes("defender"),
     move: document.querySelector('[name="move_name"]')?.value || "",
+    moveTimesAffected: document.querySelector('[name="move_times_affected"]')?.value || "0",
     hpPercent: fieldInput('[name="hp_percent"]')?.value || "100",
     maxKo: fieldInput('[name="max_ko_chance"]')?.value || "2",
     minKo: fieldInput('[name="min_ko_chance"]')?.value || "16",
@@ -978,6 +994,7 @@ function restoreState() {
     setValue('[data-set-card="attacker"] .raw-editor', state.attacker);
     setValue('[data-set-card="defender"] .raw-editor', state.defender);
     setValue('[name="move_name"]', state.move);
+    setValue('[name="move_times_affected"]', state.moveTimesAffected);
     setValue('[name="hp_percent"]', state.hpPercent);
     setValue('[name="max_ko_chance"]', normalizeKoRollValue(state.maxKo, 2));
     setValue('[name="min_ko_chance"]', normalizeKoRollValue(state.minKo, 16));

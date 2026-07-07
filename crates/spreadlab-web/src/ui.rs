@@ -104,10 +104,11 @@ fn early_restore_script() -> &'static str {
     const state = JSON.parse(localStorage.getItem(key) || "null");
     if (!state) return;
     window.__spreadlabEarlyState = state;
-    setValue('[data-set-card="attacker"] .raw-editor', state.attacker);
-    setValue('[data-set-card="defender"] .raw-editor', state.defender);
-    setSelectedMove(state.move);
-    setValue('[name="hp_percent"]', state.hpPercent);
+setValue('[data-set-card="attacker"] .raw-editor', state.attacker);
+setValue('[data-set-card="defender"] .raw-editor', state.defender);
+setSelectedMove(state.move);
+setValue('[name="move_times_affected"]', state.moveTimesAffected);
+setValue('[name="hp_percent"]', state.hpPercent);
     setValue('[name="max_ko_chance"]', state.maxKo);
     setValue('[name="min_ko_chance"]', state.minKo);
     setValue('[name="hit_goal"]', state.hitGoal);
@@ -137,8 +138,8 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260619-8"/>
-        <script defer src="/assets/app.js?v=20260619-8"></script>
+        <link rel="stylesheet" href="/assets/app.css?v=20260702-1"/>
+        <script defer src="/assets/app.js?v=20260702-1"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -175,11 +176,13 @@ fn calculation_panel(mode: Mode) -> String {
         r#"<div class="section-title"><span>1</span><b>Calculation</b></div>
 <input name="move_name" type="hidden" value="Iron Head"/>
 {hit_goal}
+{effect_controls}
 {chance_controls}
 <button class="primary" type="submit">Run</button>
 <button class="secondary swap-action" type="button">Swap</button>
 <a class="secondary" href="/survive">Clear</a>"#,
         hit_goal = hit_goal,
+        effect_controls = effect_controls(mode),
         chance_controls = chance_controls(mode),
     )
 }
@@ -535,14 +538,11 @@ fn hidden_sets(mode: Mode) -> String {
         format!(
             r#"<textarea name="attacker_set_2" hidden>{}</textarea>
 <input name="move_name_1" value="Iron Head" hidden/>
-<input name="move_name_2" value="Giga Drain" hidden/>
-<input name="move_times_affected_1" value="0" hidden/>
-<input name="move_times_affected_2" value="0" hidden/>"#,
+<input name="move_name_2" value="Giga Drain" hidden/>"#,
             sample_attacker_two()
         )
     } else {
-        r#"<input name="move_times_affected" value="0" hidden/>
-<input name="mode" value="defensive" hidden/>
+        r#"<input name="mode" value="defensive" hidden/>
 <input name="full_spend" value="false" hidden/>"#
             .to_owned()
     };
@@ -569,6 +569,20 @@ fn chance_controls(mode: Mode) -> String {
 </div>"#
             .replace("{max_ko_select}", &ko_chance_select("max_ko_chance", 2))
             .to_owned(),
+    }
+}
+
+fn effect_controls(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Sequence => {
+            r#"<div class="effect-fields">
+  <label>Move 1 effect count<input name="move_times_affected_1" type="number" min="0" max="6" step="1" value="0" data-move-effect-count/></label>
+  <label>Move 2 effect count<input name="move_times_affected_2" type="number" min="0" max="6" step="1" value="0" data-move-effect-count/></label>
+</div>"#
+        }
+        _ => {
+            r#"<label class="effect-field" hidden>Last Respects fainted allies<input name="move_times_affected" type="number" min="0" max="6" step="1" value="0" data-move-effect-count/></label>"#
+        }
     }
 }
 
