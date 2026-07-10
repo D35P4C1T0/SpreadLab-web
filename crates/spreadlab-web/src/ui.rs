@@ -20,9 +20,9 @@ pub fn render(mode: Mode, result: Option<ResultBlock>) -> String {
         r#"{top}
 <form method="post" action="{action}" class="workspace">
   {hidden_sets}
-  <aside class="side-column"><section class="calc-panel">{calc}</section>{field}</aside>
   <main class="sets-panel">{sets}</main>
-  <section class="results-panel">{results}</section>
+  <aside class="side-column"><section class="calc-panel">{calc}</section>{field}</aside>
+  <section class="results-panel" aria-live="polite" aria-busy="false">{results}</section>
 </form>
 {early_restore}"#,
         top = topbar(mode),
@@ -138,8 +138,8 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260702-1"/>
-        <script defer src="/assets/app.js?v=20260702-1"></script>
+        <link rel="stylesheet" href="/assets/app.css?v=20260710-6"/>
+        <script defer src="/assets/app.js?v=20260710-6"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -155,7 +155,7 @@ fn topbar(mode: Mode) -> String {
   <div class="brand">
     <div class="brand-mark"><img src="/api/item-sprite/Energy%20Root" alt="SpreadLab"/></div>
     <strong>SpreadLab</strong>
-                <span>[Gen 9 Champions] VGC 2026 Reg M-B</span>
+                <span>Pokémon Champions · VGC 2026 Reg M-B</span>
   </div>
   <nav class="mode-tabs">
     <a class="{defensive}" href="/survive">Defensive Calculator</a>
@@ -173,14 +173,12 @@ fn calculation_panel(mode: Mode) -> String {
         r#"<label class="hit-goal">KO target<select name="hit_goal"><option value="1" selected>OHKO</option><option value="2">2HKO</option><option value="3">3HKO</option></select></label>"#
     };
     format!(
-        r#"<div class="section-title"><span>1</span><b>Calculation</b></div>
+        r#"<div class="section-title"><span>2</span><div><b>Optimization</b><small>Updates automatically</small></div></div>
 <input name="move_name" type="hidden" value="Iron Head"/>
 {hit_goal}
 {effect_controls}
 {chance_controls}
-<button class="primary" type="submit">Run</button>
-<button class="secondary swap-action" type="button">Swap</button>
-<a class="secondary" href="/survive">Clear</a>"#,
+<button class="primary" type="submit">Recalculate now</button>"#,
         hit_goal = hit_goal,
         effect_controls = effect_controls(mode),
         chance_controls = chance_controls(mode),
@@ -195,11 +193,12 @@ fn pokemon_sets(mode: Mode) -> String {
     };
     format!(
         r#"<section class="panel sets">
-  <div class="section-title"><span>2</span><b>Pokemon Sets</b></div>
+  <div class="section-title sets-title"><span>1</span><div><b>Build the matchup</b><small>Select Pokémon, load a set, then choose a move</small></div><button class="swap-action" type="button" aria-label="Swap attacker and defender"><span>⇄</span> Swap sides</button></div>
   <div class="card-grid">
     <article class="poke-card {attacker_optimized}" data-set-card="attacker">
-      <div class="card-head"><b>Attacker</b><div><button class="raw-toggle" type="button">Raw set</button></div></div>
+      <div class="card-head"><div><span class="side-kicker">Attacking side</span><b>Attacker</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
       <div class="slot pokemon-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="attacker"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Attacker Pokemon"><span class="select2-chosen" data-pokemon-choice="attacker">Kingambit</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="attacker"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="attacker" value="Kingambit" autocomplete="off" role="combobox" aria-label="Search Attacker Pokemon"/></div><div class="pokemon-options" data-pokemon-options="attacker" role="listbox"></div></div></div></div>
+      {set_library}
       <div class="poke-row">
         <div class="sprite"><img data-sprite-name="Kingambit" src="/api/sprite/Kingambit" alt="Kingambit sprite"/></div>
         <div>
@@ -214,16 +213,18 @@ fn pokemon_sets(mode: Mode) -> String {
       <textarea class="raw-editor" data-hidden-target="attacker_set">{attacker}</textarea>
       {attacker_sp_row}
       {attacker_boost_row}
+      <div class="move-picker"><label>Move selector<select data-move-selector aria-label="Move selector"><option value="Iron Head">Iron Head</option></select></label></div>
       <div class="moves" data-field="moves">
-        <button class="move selected" type="button" data-move="Iron Head">Iron Head <span>Steel</span><label class="crit-toggle"><input type="checkbox" data-crit-move="Iron Head"/>Crit</label></button>
-        <button class="move" type="button" data-move="Knock Off">Knock Off <span>Dark</span><label class="crit-toggle"><input type="checkbox" data-crit-move="Knock Off"/>Crit</label></button>
-        <button class="move" type="button" data-move="Sucker Punch">Sucker Punch <span>Dark</span><label class="crit-toggle"><input type="checkbox" data-crit-move="Sucker Punch"/>Crit</label></button>
-        <button class="move" type="button" data-move="Swords Dance">Swords Dance <span>Normal</span><label class="crit-toggle"><input type="checkbox" data-crit-move="Swords Dance"/>Crit</label></button>
+        <div class="move selected" data-move="Iron Head"><button class="move-select" type="button">Iron Head <span>Steel</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Iron Head"/>Crit</label><button class="move-delete" type="button" data-delete-move="Iron Head" aria-label="Delete Iron Head">&#128465;&#xfe0e;</button></div>
+        <div class="move" data-move="Knock Off"><button class="move-select" type="button">Knock Off <span>Dark</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Knock Off"/>Crit</label><button class="move-delete" type="button" data-delete-move="Knock Off" aria-label="Delete Knock Off">&#128465;&#xfe0e;</button></div>
+        <div class="move" data-move="Sucker Punch"><button class="move-select" type="button">Sucker Punch <span>Dark</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Sucker Punch"/>Crit</label><button class="move-delete" type="button" data-delete-move="Sucker Punch" aria-label="Delete Sucker Punch">&#128465;&#xfe0e;</button></div>
+        <div class="move" data-move="Swords Dance"><button class="move-select" type="button">Swords Dance <span>Normal</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Swords Dance"/>Crit</label><button class="move-delete" type="button" data-delete-move="Swords Dance" aria-label="Delete Swords Dance">&#128465;&#xfe0e;</button></div>
       </div>
     </article>
     <article class="poke-card {defender_optimized}" data-set-card="defender">
-      <div class="card-head"><b>{defender_label}</b><div><button class="raw-toggle" type="button">Raw set</button></div></div>
+      <div class="card-head"><div><span class="side-kicker">Defending side</span><b>{defender_label}</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
       <div class="slot defender-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="defender"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Defender Pokemon"><span class="select2-chosen" data-pokemon-choice="defender">Floette-Mega</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="defender"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="defender" value="Floette-Mega" autocomplete="off" role="combobox" aria-label="Search Defender Pokemon"/></div><div class="pokemon-options" data-pokemon-options="defender" role="listbox"></div></div></div><label>HP %<input name="hp_percent" type="number" value="100"/></label></div>
+      {set_library}
       <div class="poke-row">
         <div class="sprite"><img data-sprite-name="Floette-Mega" src="/api/sprite/Floette-Mega" alt="Floette-Mega sprite"/></div>
         <div>
@@ -269,7 +270,21 @@ fn pokemon_sets(mode: Mode) -> String {
             ""
         },
         defender_boost_row = boost_stage_row("defender"),
+        set_library = set_library_controls(),
     )
+}
+
+fn set_library_controls() -> &'static str {
+    r#"<div class="set-library">
+  <label>Set<select data-set-library aria-label="Set preset"></select></label>
+  <button type="button" data-save-set>Save set</button>
+  <button type="button" data-delete-set disabled>Delete</button>
+  <div class="save-set-row" data-save-set-row hidden>
+    <input type="text" data-save-set-name maxlength="48" placeholder="Set name" aria-label="Saved set name"/>
+    <button type="button" data-confirm-save>Save</button>
+    <button type="button" data-cancel-save>Cancel</button>
+  </div>
+</div>"#
 }
 
 fn field_panel() -> &'static str {
@@ -326,7 +341,7 @@ fn results_panel(mode: Mode, result: Option<&ResultBlock>) -> String {
             "Results",
             "No run yet",
             "Ready",
-            r#"<article class="best-card empty-state"><h2>Run calculation</h2><p>Results from the SpreadLab API will render here as cards, tables, damage ranges, and rolls.</p></article>"#,
+            r#"<article class="best-card empty-state"><h2>Live results</h2><p>Select a move to start. Every change updates this panel automatically.</p></article>"#,
             "",
         ),
     }
@@ -346,11 +361,16 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         }
     };
     if let Some(summary) = value.get("summary") {
+        let roll_count = value
+            .get("rolls")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0);
         return result_shell(
             "Damage",
-            "16 rolls",
+            &format!("{roll_count} rolls"),
             "",
-            &damage_card(summary, "Damage calculation", "PASS"),
+            &damage_card(summary, "Damage calculation", "PASS", value.get("rolls")),
             "",
         );
     }
@@ -377,7 +397,12 @@ fn render_json_result(mode: Mode, json: &str) -> String {
     let mut html = String::new();
     html.push_str(&best_spread_card(&best, mode));
     if let Some(result) = best.get("result").or_else(|| best.get("combined")) {
-        html.push_str(&damage_card(result, "Benchmark damage", "PASS"));
+        html.push_str(&damage_card(
+            result,
+            "Benchmark damage",
+            "PASS",
+            best.get("rolls").or_else(|| result.get("rolls")),
+        ));
     }
     html.push_str(&matches_table(&matches));
     result_shell(
@@ -433,7 +458,7 @@ fn best_spread_card(best: &Value, mode: Mode) -> String {
     )
 }
 
-fn damage_card(summary: &Value, title: &str, status: &str) -> String {
+fn damage_card(summary: &Value, title: &str, status: &str, rolls: Option<&Value>) -> String {
     let min = num(summary, "min_damage");
     let max = num(summary, "max_damage");
     let pmin = summary
@@ -458,9 +483,27 @@ fn damage_card(summary: &Value, title: &str, status: &str) -> String {
     <div><small>Max damage</small><b>{max} HP</b><span>raw HP damage</span></div>
   </div>
   <div class="meter"><span style="width: {meter}%"></span></div>
+  {rolls}
   <p>Goal evaluated by API <strong>Live result</strong></p>
 </article>"#,
         meter = pmax.clamp(0.0, 100.0),
+        rolls = damage_rolls(rolls),
+    )
+}
+
+fn damage_rolls(rolls: Option<&Value>) -> String {
+    let Some(rolls) = rolls.and_then(Value::as_array) else {
+        return String::new();
+    };
+    let values = rolls
+        .iter()
+        .map(|roll| escape(&roll.to_string()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        r#"<div class="damage-rolls"><small>Damage rolls ({})</small><code>[{}]</code></div>"#,
+        rolls.len(),
+        values
     )
 }
 
@@ -646,12 +689,14 @@ fn _boost_inputs(prefix: &str) -> String {
 }
 
 fn attacker_sp_row() -> &'static str {
-    r#"<div class="statline sp-statline"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
+    r#"<div class="boost-hint sp-hint">SPs</div>
+<div class="statline sp-statline"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
 <div class="sp-row display-sps" data-sp-row="attacker"><input type="number" min="0" max="32" step="1" data-sp-key="hp" value="0"/><input type="number" min="0" max="32" step="1" data-sp-key="atk" value="32"/><input type="number" min="0" max="32" step="1" data-sp-key="def" value="0"/><input type="number" min="0" max="32" step="1" data-sp-key="spa" value="0"/><input type="number" min="0" max="32" step="1" data-sp-key="spd" value="0"/><input type="number" min="0" max="32" step="1" data-sp-key="spe" value="0"/></div>"#
 }
 
 fn defender_sp_row() -> &'static str {
-    r#"<div class="statline sp-statline spread"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
+    r#"<div class="boost-hint sp-hint">SPs</div>
+<div class="statline sp-statline spread"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
 <div class="sp-row display-sps" data-sp-row="defender"><input name="lock_hp" type="number" min="0" max="32" step="1" data-sp-key="hp" value="4"/><input name="lock_attack" type="number" min="0" max="32" step="1" data-sp-key="atk" value="0"/><input name="lock_defense" type="number" min="0" max="32" step="1" data-sp-key="def" value="0"/><input name="lock_special_attack" type="number" min="0" max="32" step="1" data-sp-key="spa" value="0"/><input name="lock_special_defense" type="number" min="0" max="32" step="1" data-sp-key="spd" value="28"/><input name="lock_speed" type="number" min="0" max="32" step="1" data-sp-key="spe" value="0"/></div>"#
 }
 
