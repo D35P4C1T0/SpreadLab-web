@@ -13,6 +13,11 @@ port before normalization into Rust models.
   raw files.
 - `generated/champions-data.json`: normalized data generated from the vendored
   `champout` dumps by `tools/normalize_champout.py`.
+- `generated/reference-inventory.json`: exact active normal-dex inventory and
+  bundled sets extracted from the pinned NCP JavaScript reference.
+
+Reference source hashes, scope classification, oracle usage, and inventory
+regeneration are documented under `tools/reference/`.
 
 Refresh the vendored data with:
 

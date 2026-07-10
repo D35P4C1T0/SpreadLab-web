@@ -13,7 +13,10 @@ pub mod optimizer;
 pub mod stats;
 pub mod types;
 
-pub use damage::{calculate_damage, CalcInput, DamageResult, ModifierBreakdown};
+pub use damage::{
+    calculate_all_moves, calculate_damage, BatchCalcInput, BatchDamageResult, CalcInput,
+    DamageOutcome, DamageResult, ModifierBreakdown, ResolvedMove,
+};
 pub use stats::{calculate_hp, calculate_non_hp_stat, calculate_stats};
 pub use types::{
     Ability, Boosts, CalcError, Category, EffectCount, Field, Format, Item, Move, Nature, Pokemon,

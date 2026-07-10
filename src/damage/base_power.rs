@@ -236,9 +236,17 @@ pub(super) fn calc_base_power(
             bp
         }
         _ if move_.is_double_power
-            && !matches!(
+            && matches!(
                 move_.name.as_str(),
-                "Retaliate" | "Fusion Bolt" | "Fusion Flare" | "Lash Out"
+                "Assurance"
+                    | "Avalanche"
+                    | "Bolt Beak"
+                    | "Fickle Beam"
+                    | "Fishious Rend"
+                    | "Payback"
+                    | "Round"
+                    | "Stomping Tantrum"
+                    | "Temper Flare"
             ) =>
         {
             modifiers.push(ModifierBreakdown::new("double-power move flag", MOD_DOUBLE));

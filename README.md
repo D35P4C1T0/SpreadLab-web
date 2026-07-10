@@ -10,17 +10,19 @@ especially integer floors, Game Freak rounding, and modifier chaining.
 
 ## Status
 
-Estimated Champions parity: **about 90%** against the JavaScript calculator's
-Champions-relevant behavior.
+**100% parity for the pinned VGC 2026 Champions Regulation M-B normal-dex
+scope.** The parity baseline is upstream commit
+`dfbf020d4ed7df8921c6e11bbaa23410f6ca1448`.
 
-The core damage path is in good shape: stat calculation, type effectiveness,
-rounding, chained modifiers, weather/terrain, common items/abilities,
-Terastal/STAB, fixed damage, multi-hit follow-ups, and the Regulation M-A
-`champout` data import path are covered by regression tests.
+The suite executes the pinned JavaScript engine and compares more than 18,000
+generated partitions covering every active move, bundled set, ability and item
+in both roles, field and battle-state boundaries, entry preprocessing,
+multi-hit recalculation, counter moves, and KO probabilities. Source hashes,
+exact inventories, and all 97 relevant reference functions are checked in CI;
+current unexplained mismatch count is zero.
 
-The remaining work is mostly not arithmetic; it is behavior that needs extra
-input modeling or more normalized metadata from the JS UI/data layer. See
-[Known Gaps](#known-gaps).
+This claim excludes legacy generations, Champions NatDex, Legends Z-A, and
+browser presentation. See [Scope Boundary](#scope-boundary).
 
 ## Example
 
@@ -75,6 +77,13 @@ let mut rock_slide = Move::new("Rock Slide", 75, PokemonType::Rock, Category::Ph
 rock_slide.targets_single_target = true;
 ```
 
+For the reference calculator's full eight-result pass, use
+`calculate_all_moves(BatchCalcInput { ... })`. It evaluates four moves in both
+directions after applying entry preprocessing once. Direction-oriented fields
+allow each side to carry its own screens, hazards, ally effects, and Protect
+state. Batch counter moves automatically calculate their selected opposing
+move; single-move callers can provide prior rolls explicitly.
+
 ## Champions Data API
 
 The crate vendors pinned Champions data so downstream tools do not need to
@@ -82,8 +91,11 @@ fetch Pokemon, item, or ability lists.
 
 ```rust
 use damage_calc::data::champions::{
-    champions_ability, champions_item, regulation_m_a_pokemon, regulation_m_b_pokemon,
-    CHAMPIONS_ABILITIES, CHAMPIONS_ITEMS, CHAMPIONS_SPECIES, REGULATION_M_A_POKEMON,
+    champions_ability, champions_item, champions_reference_move,
+    champions_reference_set, champions_reference_species, regulation_m_a_pokemon,
+    regulation_m_b_pokemon, CHAMPIONS_ABILITIES, CHAMPIONS_ITEMS,
+    CHAMPIONS_REFERENCE_MOVES, CHAMPIONS_REFERENCE_SETS,
+    CHAMPIONS_REFERENCE_SPECIES, CHAMPIONS_SPECIES, REGULATION_M_A_POKEMON,
     REGULATION_M_B_POKEMON,
 };
 
@@ -99,6 +111,20 @@ assert_eq!(champions_ability("Overgrow").unwrap().id, 65);
 let item_count = CHAMPIONS_ITEMS.len();
 let ability_count = CHAMPIONS_ABILITIES.len();
 let species_form_count = CHAMPIONS_SPECIES.len();
+
+// Exact reference metadata produces battle-ready typed values.
+let body_slam = champions_reference_move("Body Slam").unwrap().move_();
+let venusaur = champions_reference_species("Venusaur").unwrap();
+let set = champions_reference_set("Venusaur", "Sun Sleep Offense").unwrap();
+let pokemon = set.pokemon_().unwrap();
+let moves = set.moves_().unwrap();
+assert_eq!(body_slam.name, "Body Slam");
+assert_eq!(venusaur.name, "Venusaur");
+assert_eq!(pokemon.name, "Venusaur");
+assert_eq!(moves.len(), 4);
+assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 315);
+assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 496);
+assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 123);
 ```
 
 For richer imports, `damage_calc::data::CHAMPIONS_DATA_JSON` still exposes the
@@ -113,6 +139,7 @@ Implemented and covered by tests:
 - modern damage base formula and random rolls
 - JS `pokeRound` and `chainMods`
 - STAB, Adaptability-style STAB, and Champions Terastal STAB
+- Champions Tera 60-BP floor and its priority/multi-hit exceptions
 - modern type chart
 - type items, gems, Life Orb, Expert Belt, resist berries, Choice items
 - Champions raw item list in `data/champions/items.json`, with typed enum
@@ -145,7 +172,7 @@ Implemented and covered by tests:
   Cudgel, Tera Blast, and Tera Starstorm
 - `CALCULATE_ALL_MOVES_SV` preprocessing for Trace, Neutralizing Gas, Forecast,
   Mimicry, Air Lock/Cloud Nine, Klutz, terrain seeds, Intimidate, Download,
-  Embody Aspect, Battle Bond, Intrepid Sword, Dauntless Shield, Wind Rider, and
+  Embody Aspect, Intrepid Sword, Dauntless Shield, Wind Rider, and
   Supersweet Syrup
 - Protosynthesis/Quark Drive activation from Sun/Electric Terrain or Booster
   Energy, including highest-stat attack/defense/speed modifiers
@@ -156,13 +183,14 @@ Implemented and covered by tests:
 - recovery-aware KO odds for Sitrus, Oran, and modern pinch berries, including
   recovery between hits of the same multi-hit move
 - counter-style damage moves (`Counter`, `Mirror Coat`, `Metal Burst`, and
-  `Comeuppance`) when the caller supplies the countered damage rolls/category
+  `Comeuppance`), with automatic opposing-move inference in the batch API and
+  explicit prior-damage input in the single-move API
 - multi-hit totals and per-hit rolls, including Triple Kick/Triple Axel hit
   power, Parental Bond second-hit reduction, and Stamina/Weak Armor between-hit
   recalculation
 - multi-hit first-hit consumables/effects for resist berries, Kee Berry,
   Maranga Berry, Multiscale, Shadow Shield, Gooey, Tangling Hair, Cotton Down,
-  Spicy Spray, Sand Spit weather activation, Defiant/Competitive follow-up
+  Spicy Spray, Defiant/Competitive follow-up
   boosts, and burn-heal berries
 - Ruin field modifiers
 - priority-blocking abilities and Psychic Terrain priority prevention
@@ -171,48 +199,47 @@ Implemented and covered by tests:
 - final speed modifiers for speed-based moves and Analytic ordering
 - special stat-source moves such as Foul Play, Body Press, and Psyshock-style
   physical-defense special moves
-- Champions ability branches for Plus, Minus, Ripen-enhanced berries, and
-  Disguise direct-damage replacement
+- Champions ability branches for Plus, Minus, and Ripen-enhanced berries
 - JS custom modifier hooks for BP/Attack/Defense/Final modifiers
 - Protect quartering only for JS-qualified move/ability paths
 - Sun/Rain damage modifiers
 - Electric/Grassy/Psychic/Misty terrain power modifiers
 - critical hit boost-ignore behavior
 - burn, Reflect, Light Screen, Aurora Veil
+- Stealth Rock, one-to-three Spikes layers, Salt Cure, initial toxic counter,
+  healing suppression/removal, and reference-ordered end-of-turn KO projection
+- exact typed inventories for 315 Pokemon/forms, 496 moves, 148 items, 201
+  unique abilities, and 123 bundled sets
+- one-move and two-direction four-move calculation APIs, with entry
+  preprocessing applied once
+- semantic result metadata for resolved move state, outcome kind, and signed
+  Pain Split HP changes
 
-Fixtures live in `fixtures/js_outputs/champions_cases.json`, and regression
-tests live in `tests/fixtures.rs`.
+Regression tests live in `tests/fixtures.rs`. Live differential tests and the
+pinned Node oracle live in `tests/reference_oracle.rs` and `tools/reference/`.
 
-## Known Gaps
+## Scope Boundary
 
-This is not yet a full port of every Champions-relevant browser calculator
-branch. The biggest remaining gaps are:
+Parity covers generation-10 Regulation M-B normal dex and semantic library
+results. It does not claim parity for:
 
-- Battle-state effects outside direct damage, such as Magic Guard preventing
-  indirect damage/recoil. These need a battle-event model rather than a single
-  damage calculation.
-- Counter-style moves require callers to provide the previous/countered damage
-  rolls and category on `Move`; the library does not infer them from a turn
-  history.
-- Full Neutralizing Gas / Trace exception parity for every unsuppressible or
-  uncopyable ability in the JS lists.
-- Remaining browser/UI-only setup toggles that are not yet represented as typed
-  `Field` or `Pokemon` inputs.
-- Species-locked item legality beyond the Champions Mega-stone/Fling/Knock Off
-  cases already covered.
-- Z-Move, Max Move, Dynamax, and Legends Z-A cooldown/plus-move branches. These
-  exist in the shared JS files but are outside the first-pass Champions library
-  scope unless Champions formats require them.
-- High-level constructors from normalized Champions data into calculator
-  `Pokemon` and `Move` structs. The pinned lists and full JSON are exposed, but
-  callers still assemble battle-ready typed inputs directly.
-- Optimizer search and spread ranking beyond module placeholders.
+- HTML/CSS/JQuery behavior, DOM description strings, local storage, audio, or
+  images
+- generations 1-9, Dynamax/Max Moves, Z-Moves, and G-Max residual fields
+- Legends Z-A cooldowns, Plus Moves, link items, and damage reduction
+- Champions NatDex
+- full turn simulation beyond state consumed by damage and four-use KO
+  projection
+- optimizer search/ranking, a Rust-only future feature absent from the
+  reference damage engine
+
+Rust-only extensions, such as the explicit Leech Seed KO input, are outside
+the compatibility comparison and do not alter scoped reference behavior.
 
 Local JS reference checkouts may live under `reference/` for behavior audits,
 but that folder is ignored and intentionally not published in this repository.
-The library should prefer `champout` plus targeted JS-only metadata rather than
-a full raw import of `pokedex.js`, `move_data.js`, `item_data.js`, and
-`ability_data.js`.
+The published crate contains normalized `champout` data plus a generated exact
+reference inventory. It does not publish the full upstream checkout.
 
 ## Thanks To
 
