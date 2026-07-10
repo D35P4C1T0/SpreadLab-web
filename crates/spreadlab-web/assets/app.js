@@ -29,6 +29,7 @@ let speciesTypes = {};
 let speciesAbilities = {};
 let pokemonList = [];
 let itemList = [];
+let moveList = [];
 let pokemonSearchList = [];
 let itemSearchList = [];
 const megaStonePokemon = Object.freeze({
@@ -109,7 +110,10 @@ const megaStonePokemon = Object.freeze({
   Victreebelite: "Mega Victreebel",
 });
 const storageKey = "spreadlab.webui.state.v1";
+const savedSetsKey = "spreadlab.webui.savedSets.v1";
 let restoredState = null;
+let builtInSets = [];
+let savedSets = [];
 
 function parseSet(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -193,7 +197,9 @@ function rewriteCardSet(card) {
     : editor.value;
   if (nature && nature !== "Any") text = replaceOrInsertLine(text, / Nature$/i, `${nature} Nature`);
   editor.value = text;
+  delete card.dataset.activeSavedSet;
   syncRawEditor(editor);
+  refreshSetLibrary(card);
 }
 
 function renderCard(card, parsed) {
@@ -243,15 +249,16 @@ function renderCard(card, parsed) {
       moves.innerHTML = `<div class="empty-moves">No moves selected</div>`;
     } else {
     const moveInput = document.querySelector('[name="move_name"]');
-    const selectedMove = card.dataset.setCard === "attacker" && parsed.moves.includes(moveInput?.value)
+    const selectedMove = card.dataset.setCard === "attacker" && moveInput?.value
       ? moveInput.value
       : parsed.moves[0];
     moves.innerHTML = parsed.moves.map((move) =>
-      `<button class="move ${move === selectedMove ? "selected" : ""}" type="button" data-move="${escapeAttr(move)}">${escapeHtml(move)} <span class="${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label></button>`
+      `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button">${escapeHtml(move)} <span class="${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`
     ).join("");
     if (card.dataset.setCard === "attacker") setSelectedMove(selectedMove);
     }
   }
+  if (card.dataset.setCard === "attacker") renderMoveSelector();
 
   for (const [key] of statOrder) {
     const value = parsed.sps[key] || 0;
@@ -305,6 +312,29 @@ async function loadItemList() {
     const data = await response.json();
     setItemList(data);
   } catch (_) {}
+}
+
+async function loadMoveList() {
+  try {
+    const response = await fetch("/api/meta");
+    if (!response.ok) return;
+    const data = await response.json();
+    moveList = sortedUniqueNames(data.moves || []);
+    renderMoveSelector();
+  } catch (_) {}
+}
+
+function renderMoveSelector() {
+  const select = document.querySelector("[data-move-selector]");
+  if (!select || !moveList.length) return;
+  const currentMoves = parseSet(document.querySelector('[data-set-card="attacker"] .raw-editor')?.value || "").moves;
+  const available = moveList.filter((move) => !currentMoves.includes(move));
+  const full = currentMoves.length >= 4;
+  select.innerHTML = `<option value="">${full ? "Four moves selected" : "Add a move…"}</option>` + available
+    .map((move) => `<option value="${escapeAttr(move)}">${escapeHtml(move)}</option>`)
+    .join("");
+  select.value = "";
+  select.disabled = full;
 }
 
 function setPokemonList(data) {
@@ -455,7 +485,9 @@ function initAbilityToggles() {
         `Ability On: ${toggle.checked ? "true" : "false"}`,
         /^Ability:/i
       );
+      delete card.dataset.activeSavedSet;
       syncRawEditor(editor);
+      refreshSetLibrary(card);
       syncAbilityEffects();
       saveState();
       autoRun();
@@ -481,7 +513,9 @@ function initStatuses() {
       const editor = card?.querySelector(".raw-editor");
       if (!card || !editor) return;
       editor.value = setWithStatus(editor.value, card.dataset.setCard);
+      delete card.dataset.activeSavedSet;
       syncRawEditor(editor);
+      refreshSetLibrary(card);
       saveState();
       autoRun();
     });
@@ -493,6 +527,11 @@ function initRawEditors() {
     syncRawEditor(editor);
     let renderTimer = null;
     editor.addEventListener("input", () => {
+      const card = editor.closest("[data-set-card]");
+      if (card) {
+        delete card.dataset.activeSavedSet;
+        refreshSetLibrary(card);
+      }
       syncRawEditorValue(editor);
       saveState();
       clearTimeout(renderTimer);
@@ -508,12 +547,149 @@ function initRawEditors() {
     });
   });
   document.querySelectorAll(".raw-toggle").forEach((button) => {
-    button.addEventListener("click", () => button.closest("[data-set-card]")?.classList.toggle("show-raw"));
+    button.addEventListener("click", () => {
+      const card = button.closest("[data-set-card]");
+      const expanded = card?.classList.toggle("show-raw") || false;
+      button.setAttribute("aria-expanded", String(expanded));
+      if (expanded) card?.querySelector(".raw-editor")?.focus();
+    });
   });
 }
 
+function initSetLibraries() {
+  builtInSets = [...document.querySelectorAll("[data-set-card] .raw-editor")]
+    .map((editor) => {
+      const text = editor.defaultValue.trim();
+      const pokemon = parseSet(text).name;
+      return { id: `builtin:${normalizeName(pokemon)}`, name: `${pokemon} · Common`, pokemon, text };
+    })
+    .filter((entry, index, all) => entry.pokemon && all.findIndex((candidate) => candidate.id === entry.id) === index);
+  savedSets = loadSavedSets();
+
+  document.querySelectorAll("[data-set-card]").forEach((card) => {
+    refreshSetLibrary(card);
+    card.querySelector("[data-set-library]")?.addEventListener("change", (event) => applySetLibrarySelection(card, event.target.value));
+    card.querySelector("[data-save-set]")?.addEventListener("click", () => openSaveSetRow(card));
+    card.querySelector("[data-cancel-save]")?.addEventListener("click", () => closeSaveSetRow(card));
+    card.querySelector("[data-confirm-save]")?.addEventListener("click", () => saveCurrentSet(card));
+    card.querySelector("[data-save-set-name]")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        saveCurrentSet(card);
+      }
+      if (event.key === "Escape") closeSaveSetRow(card);
+    });
+    card.querySelector("[data-delete-set]")?.addEventListener("click", () => deleteCurrentSavedSet(card));
+  });
+}
+
+function loadSavedSets() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(savedSetsKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry?.id && entry?.name && entry?.pokemon && entry?.text) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function persistSavedSets() {
+  localStorage.setItem(savedSetsKey, JSON.stringify(savedSets));
+}
+
+function setsForPokemon(pokemon) {
+  const key = normalizeName(pokemon);
+  return {
+    builtIn: builtInSets.filter((entry) => normalizeName(entry.pokemon) === key),
+    saved: savedSets.filter((entry) => normalizeName(entry.pokemon) === key),
+  };
+}
+
+function refreshSetLibrary(card) {
+  const select = card.querySelector("[data-set-library]");
+  const editor = card.querySelector(".raw-editor");
+  if (!select || !editor) return;
+  const pokemon = parseSet(editor.value).name;
+  const available = setsForPokemon(pokemon);
+  const activeId = card.dataset.activeSavedSet || "";
+  const matchingBuiltIn = available.builtIn.find((entry) => normalizedSetText(entry.text) === normalizedSetText(editor.value));
+  const matchingSaved = available.saved.find((entry) => entry.id === activeId && normalizedSetText(entry.text) === normalizedSetText(editor.value));
+  const selected = matchingSaved?.id || matchingBuiltIn?.id || "current";
+  select.innerHTML = [
+    `<option value="current">Current set</option>`,
+    ...available.builtIn.map((entry) => `<option value="${escapeAttr(entry.id)}">${escapeHtml(entry.name)}</option>`),
+    ...available.saved.map((entry) => `<option value="${escapeAttr(entry.id)}">★ ${escapeHtml(entry.name)}</option>`),
+    `<option value="blank">Blank set</option>`,
+  ].join("");
+  select.value = selected;
+  const deleteButton = card.querySelector("[data-delete-set]");
+  if (deleteButton) deleteButton.disabled = !matchingSaved;
+}
+
+function applySetLibrarySelection(card, id) {
+  if (id === "current") return;
+  const editor = card.querySelector(".raw-editor");
+  if (!editor) return;
+  const pokemon = parseSet(editor.value).name;
+  const entry = [...builtInSets, ...savedSets].find((candidate) => candidate.id === id);
+  editor.value = id === "blank" ? buildBlankPokemonSet(card, pokemon) : entry?.text || editor.value;
+  if (entry && id.startsWith("saved:")) card.dataset.activeSavedSet = id;
+  else delete card.dataset.activeSavedSet;
+  syncRawEditor(editor);
+  refreshSetLibrary(card);
+  saveState();
+  autoRun();
+}
+
+function openSaveSetRow(card) {
+  const row = card.querySelector("[data-save-set-row]");
+  const input = card.querySelector("[data-save-set-name]");
+  if (!row || !input) return;
+  row.hidden = false;
+  input.value = "";
+  input.focus();
+}
+
+function closeSaveSetRow(card) {
+  const row = card.querySelector("[data-save-set-row]");
+  if (row) row.hidden = true;
+}
+
+function saveCurrentSet(card) {
+  const input = card.querySelector("[data-save-set-name]");
+  const editor = card.querySelector(".raw-editor");
+  const name = input?.value.trim();
+  if (!name || !editor) {
+    input?.focus();
+    return;
+  }
+  const pokemon = parseSet(editor.value).name;
+  const id = `saved:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  savedSets.push({ id, name, pokemon, text: editor.value });
+  persistSavedSets();
+  card.dataset.activeSavedSet = id;
+  closeSaveSetRow(card);
+  document.querySelectorAll("[data-set-card]").forEach(refreshSetLibrary);
+}
+
+function deleteCurrentSavedSet(card) {
+  const id = card.dataset.activeSavedSet;
+  if (!id) return;
+  savedSets = savedSets.filter((entry) => entry.id !== id);
+  persistSavedSets();
+  delete card.dataset.activeSavedSet;
+  document.querySelectorAll("[data-set-card]").forEach(refreshSetLibrary);
+}
+
 function initMoves() {
+  document.querySelector("[data-move-selector]")?.addEventListener("change", (event) => {
+    addMoveToAttackerSet(event.target.value);
+  });
   document.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-delete-move]");
+    if (deleteButton) {
+      deleteMoveFromAttackerSet(deleteButton.dataset.deleteMove);
+      return;
+    }
     const move = event.target.closest(".move");
     if (!move) return;
     if (event.target.closest(".crit-toggle")) {
@@ -521,18 +697,60 @@ function initMoves() {
       autoRun();
       return;
     }
-    move.parentElement.querySelectorAll(".move").forEach((node) => node.classList.remove("selected"));
-    move.classList.add("selected");
-    const moveInput = document.querySelector('[name="move_name"]');
-    if (moveInput && move.dataset.move) moveInput.value = move.dataset.move;
+    if (event.target.closest(".move-select") && move.dataset.move) setSelectedMove(move.dataset.move);
     saveState();
     autoRun();
   });
 }
 
+function addMoveToAttackerSet(moveName) {
+  if (!moveName) return;
+  const card = document.querySelector('[data-set-card="attacker"]');
+  const editor = card?.querySelector(".raw-editor");
+  if (!card || !editor) return;
+  const parsed = parseSet(editor.value);
+  if (parsed.moves.includes(moveName)) {
+    setSelectedMove(moveName);
+    renderMoveSelector();
+    return;
+  }
+  if (parsed.moves.length >= 4) return;
+  editor.value = `${editor.value.trimEnd()}\n- ${moveName}`;
+  delete card.dataset.activeSavedSet;
+  const moveInput = document.querySelector('[name="move_name"]');
+  if (moveInput) moveInput.value = moveName;
+  syncRawEditor(editor);
+  refreshSetLibrary(card);
+  saveState();
+  autoRun();
+}
+
+function deleteMoveFromAttackerSet(moveName) {
+  const card = document.querySelector('[data-set-card="attacker"]');
+  const editor = card?.querySelector(".raw-editor");
+  if (!card || !editor || !moveName) return;
+  editor.value = editor.value
+    .split(/\r?\n/)
+    .filter((line) => !(line.trim().startsWith("-") && normalizeName(line.replace(/^-+\s*/, "")) === normalizeName(moveName)))
+    .join("\n");
+  delete card.dataset.activeSavedSet;
+  const remainingMoves = parseSet(editor.value).moves;
+  const moveInput = document.querySelector('[name="move_name"]');
+  if (moveInput?.value === moveName || !remainingMoves.includes(moveInput?.value)) {
+    if (moveInput) moveInput.value = remainingMoves[0] || "";
+  }
+  syncRawEditor(editor);
+  refreshSetLibrary(card);
+  saveState();
+  autoRun();
+}
+
 function initPersistentInputs() {
   document.querySelectorAll('[name="hp_percent"], [name="max_ko_chance"], [name="min_ko_chance"], [name="limit"], [name="hit_goal"], [data-move-effect-count]').forEach((input) => {
-    input.addEventListener("input", saveState);
+    input.addEventListener("input", () => {
+      saveState();
+      autoRun();
+    });
     input.addEventListener("change", () => {
       saveState();
       autoRun();
@@ -741,11 +959,14 @@ function applyPokemonSelection(cardKey, rawName) {
   resetCardTraining(card);
   resetCardBoosts(card);
   clearCardMoves(card);
-  let nextSet = buildBlankPokemonSet(card, selected);
-  const megaStone = megaStoneForPokemon(selected);
+  const commonSet = setsForPokemon(selected).builtIn[0];
+  let nextSet = commonSet?.text || buildBlankPokemonSet(card, selected);
+  const megaStone = !commonSet && megaStoneForPokemon(selected);
   if (megaStone) nextSet = setFirstLineItem(nextSet, megaStone);
   editor.value = nextSet;
+  delete card.dataset.activeSavedSet;
   syncRawEditor(editor);
+  refreshSetLibrary(card);
   saveState();
   autoRun();
 }
@@ -763,7 +984,9 @@ function applyItemSelection(cardKey, rawName) {
   if (choice) choice.replaceChildren(document.createTextNode(selected));
 
   editor.value = setFirstLineItem(editor.value, selected);
+  delete card.dataset.activeSavedSet;
   syncRawEditor(editor);
+  refreshSetLibrary(card);
   saveState();
   autoRun();
 }
@@ -837,9 +1060,13 @@ function initSwap() {
     const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
     if (!attacker || !defender) return;
     [attacker.value, defender.value] = [defender.value, attacker.value];
+    delete attacker.closest("[data-set-card]")?.dataset.activeSavedSet;
+    delete defender.closest("[data-set-card]")?.dataset.activeSavedSet;
     syncRawEditor(attacker);
     syncRawEditor(defender);
+    document.querySelectorAll("[data-set-card]").forEach(refreshSetLibrary);
     saveState();
+    autoRun();
   });
 }
 
@@ -1060,35 +1287,114 @@ function cssEscape(value) {
   return String(value).replace(/["\\]/g, "\\$&");
 }
 
-async function initRun() {
+let runController = null;
+
+function initRun() {
   document.querySelector("form.workspace")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!canRunCalculation()) return;
     const panel = document.querySelector(".results-panel");
+    runController?.abort();
+    const controller = new AbortController();
+    runController = controller;
     panel.classList.add("loading");
+    panel.setAttribute("aria-busy", "true");
     try {
       const { path, body } = currentPayload();
-      const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || response.statusText);
+      if (controller.signal.aborted) return;
+      await attachBestDamageRolls(data, path, body, controller.signal);
       panel.innerHTML = renderResults(data);
       initShare();
     } catch (error) {
+      if (error.name === "AbortError") return;
       panel.innerHTML = `<div class="results-head"><b>Error</b><span>0 results</span></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
     } finally {
-      panel.classList.remove("loading");
+      if (runController === controller) {
+        panel.classList.remove("loading");
+        panel.setAttribute("aria-busy", "false");
+      }
     }
   });
 }
 
+async function attachBestDamageRolls(data, path, body, signal) {
+  if (data.summary || signal.aborted) return;
+  const matches = Array.isArray(data) ? data : (data.matches || []);
+  const best = data.best || matches[0];
+  if (!best) return;
+  const damageBody = bestDamagePayload(path, body, best);
+  if (!damageBody) return;
+  try {
+    const response = await fetch("/api/damage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(damageBody),
+      signal,
+    });
+    if (!response.ok) return;
+    const damage = await response.json();
+    if (Array.isArray(damage.rolls)) best.rolls = damage.rolls;
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+  }
+}
+
+function bestDamagePayload(path, body, best) {
+  let benchmark;
+  let optimizedSide;
+  if (path === "/api/survive" || path === "/api/ko") {
+    benchmark = { ...body };
+    optimizedSide = path === "/api/ko" ? "attacker_set" : "defender_set";
+  } else if (path === "/api/survive-sequence") {
+    const hit = body.hits?.[0];
+    if (!hit) return null;
+    benchmark = { ...hit, defender_set: body.defender_set };
+    optimizedSide = "defender_set";
+  } else if (path === "/api/optimize/defensive") {
+    benchmark = { ...(body.benchmarks?.[0] || {}) };
+    optimizedSide = "defender_set";
+  } else {
+    return null;
+  }
+  if (!benchmark[optimizedSide]) return null;
+  benchmark[optimizedSide] = setWithOptimizedSpread(benchmark[optimizedSide], best);
+  return {
+    attacker_set: benchmark.attacker_set,
+    defender_set: benchmark.defender_set,
+    move_name: benchmark.move_name,
+    move_times_affected: benchmark.move_times_affected || 0,
+    critical: benchmark.critical || false,
+    field: benchmark.field,
+  };
+}
+
+function setWithOptimizedSpread(text, best) {
+  let updated = text;
+  if (best.sp_line) updated = replaceOrInsertLine(updated, /^(SPs|EVs):/i, best.sp_line);
+  if (best.nature) updated = replaceOrInsertLine(updated, / Nature$/i, `${best.nature} Nature`);
+  return updated;
+}
+
+function canRunCalculation() {
+  return Boolean(
+    document.querySelector('[name="move_name"]')?.value &&
+    document.querySelector('[name="attacker_set"]')?.value &&
+    document.querySelector('[name="defender_set"]')?.value
+  );
+}
+
 function renderResults(data) {
   if (data.summary) {
-    return resultShell("Damage", "16 rolls", "", `${warningsCard(data.warnings)}${damageCard(data.summary)}`);
+    return resultShell("Damage", `${data.rolls?.length || 0} rolls`, "", `${warningsCard(data.warnings)}${damageCard(data.summary, data.rolls)}`);
   }
   const matches = Array.isArray(data) ? data : (data.matches || []);
   const best = data.best || matches[0] || null;
   const count = matches.length;
   const bestLabel = best?.sp_line || "No match";
-  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {})}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
+  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {}, best.rolls)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
   return resultShell("Results", `${count} results`, bestLabel, body);
 }
 
@@ -1107,10 +1413,13 @@ function bestCard(best) {
   return `<article class="best-card" data-tab-panel="best"><h2>Best Spread</h2><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "-")}</b><em>API selected</em></div><div class="spread-big">${escapeHtml(best.sp_line || "-")}<small>Total SP: ${best.total_points ?? "-"} / 66</small></div><div><small>KO Chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b><small>from optimizer</small></div></div>${finalStats(stats)}</article>`;
 }
 
-function damageCard(summary) {
+function damageCard(summary, rolls = summary.rolls || []) {
   const pmax = Number(summary.percent_max || 0);
   const move = document.querySelector('[name="move_name"]')?.value || "Selected move";
-  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title">vs <b>${escapeHtml(move)}</b> <span>API</span><em>PASS</em></div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "-"} - ${summary.max_damage ?? "-"}</b><span>${fmt(summary.percent_min)}% - ${fmt(summary.percent_max)}%</span></div><div><small>KO Chance</small><b>${percent(summary.ko_chance)}</b><span>calculated</span></div><div><small>Max damage</small><b>${summary.max_damage ?? "-"} HP</b><span>raw HP damage</span></div></div><div class="meter"><span style="width: ${Math.max(0, Math.min(100, pmax))}%"></span></div><p>Goal evaluated by API <strong>Live result</strong></p></article>`;
+  const damageRolls = Array.isArray(rolls) && rolls.length
+    ? `<div class="damage-rolls"><small>Damage rolls (${rolls.length})</small><code>[${rolls.map((roll) => escapeHtml(roll)).join(", ")}]</code></div>`
+    : "";
+  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title">vs <b>${escapeHtml(move)}</b> <span>API</span><em>PASS</em></div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "-"} - ${summary.max_damage ?? "-"}</b><span>${fmt(summary.percent_min)}% - ${fmt(summary.percent_max)}%</span></div><div><small>KO Chance</small><b>${percent(summary.ko_chance)}</b><span>calculated</span></div><div><small>Max damage</small><b>${summary.max_damage ?? "-"} HP</b><span>raw HP damage</span></div></div><div class="meter"><span style="width: ${Math.max(0, Math.min(100, pmax))}%"></span></div>${damageRolls}<p>Goal evaluated by API <strong>Live result</strong></p></article>`;
 }
 
 function matchesTable(matches) {
@@ -1278,10 +1587,14 @@ function syncToggleLabels() {
 
 let autoRunTimer = null;
 function autoRun() {
-  const panel = document.querySelector(".results-panel");
-  if (!panel || panel.querySelector(".empty-state")) return;
   clearTimeout(autoRunTimer);
-  autoRunTimer = setTimeout(() => document.querySelector("form.workspace")?.requestSubmit(), 250);
+  if (!canRunCalculation()) {
+    runController?.abort();
+    const panel = document.querySelector(".results-panel");
+    if (panel) panel.innerHTML = `<div class="results-head"><b>Results</b><span>Waiting</span><p>Select a move</p></div><article class="best-card empty-state"><h2>Add a move</h2><p>Choose a move from the selector to calculate.</p></article>`;
+    return;
+  }
+  autoRunTimer = setTimeout(() => document.querySelector("form.workspace")?.requestSubmit(), 320);
 }
 
 function escapeHtml(value) {
@@ -1326,9 +1639,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadSpeciesAbilities(),
     loadPokemonList(),
     loadItemList(),
+    loadMoveList(),
   ]);
   initShare();
   initRun();
+  initSetLibraries();
   initToggles();
   initPersistentInputs();
   initPokemonSelectors();
@@ -1343,6 +1658,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveState();
   initMoves();
   initSwap();
+  autoRun();
 });
 
 window.addEventListener("pagehide", saveStateNow);

@@ -283,19 +283,24 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
 }
 
 async fn api_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebError> {
-    let slug = sprite_slug(&name);
-    let path =
-        PathBuf::from("crates/spreadlab-web/assets/sprites-static").join(format!("{slug}.png"));
+    let slug = showdown_sprite_slug(&name);
+    let path = PathBuf::from("crates/spreadlab-web/assets/sprites-static/showdown")
+        .join(format!("{slug}.img"));
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
             .map_err(|error| WebError::Asset(error.to_string()))?;
     }
     if tokio::fs::metadata(&path).await.is_err() {
-        let api_slug = pokeapi_slug(&slug);
-        let bytes = fetch_pokemon_sprite(&api_slug)
-            .await
-            .unwrap_or_else(|| MISSINGNO_GEN3.to_vec());
+        let bytes = match fetch_showdown_sprite(&slug).await {
+            Some(bytes) => bytes,
+            None => {
+                let fallback_slug = pokeapi_slug(&sprite_slug(&name));
+                fetch_pokeapi_sprite(&fallback_slug)
+                    .await
+                    .unwrap_or_else(|| MISSINGNO_GEN3.to_vec())
+            }
+        };
         tokio::fs::write(&path, bytes)
             .await
             .map_err(|error| WebError::Asset(error.to_string()))?;
@@ -304,7 +309,7 @@ async fn api_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebEr
         .await
         .map_err(|error| WebError::Asset(error.to_string()))?;
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("image/png"));
+    headers.insert(header::CONTENT_TYPE, pokemon_sprite_content_type(&bytes));
     headers.insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=604800"),
@@ -314,7 +319,19 @@ async fn api_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebEr
 
 const MISSINGNO_GEN3: &[u8] = include_bytes!("../assets/fallbacks/missingno-gen3.png");
 
-async fn fetch_pokemon_sprite(slug: &str) -> Option<Vec<u8>> {
+async fn fetch_showdown_sprite(slug: &str) -> Option<Vec<u8>> {
+    let response = reqwest::get(format!(
+        "https://play.pokemonshowdown.com/sprites/ani/{slug}.gif"
+    ))
+    .await
+    .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.bytes().await.ok().map(|bytes| bytes.to_vec())
+}
+
+async fn fetch_pokeapi_sprite(slug: &str) -> Option<Vec<u8>> {
     let response = reqwest::get(format!("https://pokeapi.co/api/v2/pokemon/{slug}"))
         .await
         .ok()?;
@@ -342,6 +359,14 @@ async fn fetch_pokemon_sprite(slug: &str) -> Option<Vec<u8>> {
         .await
         .ok()
         .map(|bytes| bytes.to_vec())
+}
+
+fn pokemon_sprite_content_type(bytes: &[u8]) -> HeaderValue {
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        HeaderValue::from_static("image/gif")
+    } else {
+        HeaderValue::from_static("image/png")
+    }
 }
 
 async fn api_item_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebError> {
@@ -1504,6 +1529,54 @@ fn default_limit() -> usize {
     10
 }
 
+fn showdown_sprite_slug(name: &str) -> String {
+    let slug = name
+        .trim()
+        .to_ascii_lowercase()
+        .replace(" (hisuian)", "-hisui")
+        .replace(" (alolan)", "-alola")
+        .replace(" (galarian)", "-galar")
+        .replace(" (paldean combat breed)", "-paldea-combat-breed")
+        .replace(" (paldean blaze breed)", "-paldea-blaze-breed")
+        .replace(" (paldean aqua breed)", "-paldea-aqua-breed")
+        .replace(['(', ')', '.', '\'', '♀', '♂'], "")
+        .replace(" forme", "")
+        .replace(" form", "")
+        .replace(' ', "-");
+
+    if let Some(rest) = slug.strip_prefix("mega-") {
+        return showdown_prefixed_mega_slug(rest);
+    }
+    if let Some((species, form)) = slug.split_once("-mega-") {
+        return showdown_formed_mega_slug(species, form);
+    }
+    slug
+}
+
+fn showdown_prefixed_mega_slug(rest: &str) -> String {
+    let Some((species, form)) = rest.rsplit_once('-') else {
+        return format!("{rest}-mega");
+    };
+    if matches!(form, "x" | "y" | "z") {
+        format!("{species}-mega{form}")
+    } else if matches!(
+        form,
+        "m" | "f" | "curly" | "droopy" | "stretchy" | "original"
+    ) {
+        format!("{species}-{form}mega")
+    } else {
+        format!("{rest}-mega")
+    }
+}
+
+fn showdown_formed_mega_slug(species: &str, form: &str) -> String {
+    if matches!(form, "x" | "y" | "z") {
+        format!("{species}-mega{form}")
+    } else {
+        format!("{species}-{form}mega")
+    }
+}
+
 fn sprite_slug(name: &str) -> String {
     name.to_ascii_lowercase()
         .replace("mega ", "")
@@ -1540,6 +1613,18 @@ fn item_slug(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn showdown_sprite_slugs_cover_new_and_formed_megas() {
+        assert_eq!(showdown_sprite_slug("Mega Eelektross"), "eelektross-mega");
+        assert_eq!(showdown_sprite_slug("Floette-Mega"), "floette-mega");
+        assert_eq!(showdown_sprite_slug("Mega Raichu X"), "raichu-megax");
+        assert_eq!(showdown_sprite_slug("Garchomp-Mega-Z"), "garchomp-megaz");
+        assert_eq!(
+            showdown_sprite_slug("Tatsugiri-Mega-Curly"),
+            "tatsugiri-curlymega"
+        );
+    }
 
     #[test]
     fn pokemon_champions_item_catalog_contains_recent_items() {
