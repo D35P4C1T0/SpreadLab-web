@@ -1,0 +1,35 @@
+{
+  "left": {
+    "name": "Attacker",
+    "types": ["Normal", ""],
+    "baseStats": {
+      "hp": 100,
+      "attack": 100,
+      "defense": 100,
+      "specialAttack": 100,
+      "specialDefense": 100,
+      "speed": 100
+    },
+    "statPoints": {},
+    "nature": "Hardy",
+    "moves": [
+      { "name": "Body Slam", "basePower": 85, "type": "Normal", "category": "Physical", "makesContact": true }
+    ]
+  },
+  "right": {
+    "name": "Defender",
+    "types": ["Normal", ""],
+    "baseStats": {
+      "hp": 100,
+      "attack": 100,
+      "defense": 100,
+      "specialAttack": 100,
+      "specialDefense": 100,
+      "speed": 100
+    },
+    "statPoints": {},
+    "nature": "Hardy",
+    "moves": []
+  },
+  "field": { "format": "Doubles" }
+}

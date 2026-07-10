@@ -1,9 +1,10 @@
 #![allow(clippy::field_reassign_with_default)]
 
 use damage_calc::{
-    calculate_damage, calculate_hp, calculate_non_hp_stat, Ability, Boosts, CalcInput, Category,
-    EffectCount, Field, Format, Item, Move, Nature, Pokemon, PokemonType, RivalryTarget, Ruleset,
-    SideConditions, Stat, StatTable, StatusCondition, Terrain, Weather,
+    calculate_all_moves, calculate_damage, calculate_hp, calculate_non_hp_stat, Ability,
+    BatchCalcInput, Boosts, CalcInput, Category, DamageOutcome, EffectCount, Field, Format, Item,
+    Move, Nature, Pokemon, PokemonType, RivalryTarget, Ruleset, SideConditions, Stat, StatTable,
+    StatusCondition, Terrain, Weather,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -727,11 +728,18 @@ fn remaining_champions_abilities_plus_minus_ripen_disguise_and_sand_spit_match_j
     disguised.ability_on = true;
     let result = calc(
         attacker.clone(),
+        disguised.clone(),
+        flamethrower.clone(),
+        Field::default(),
+    );
+    disguised.ability = Ability::None;
+    let undisguised = calc(
+        attacker.clone(),
         disguised,
         flamethrower.clone(),
         Field::default(),
     );
-    assert_eq!(result.damage_rolls, vec![21]);
+    assert_eq!(result.damage_rolls, undisguised.damage_rolls);
 
     let mut sand_spit = stat_100_mon("Sand Spit", PokemonType::Normal);
     sand_spit.ability = Ability::SandSpit;
@@ -744,7 +752,7 @@ fn remaining_champions_abilities_plus_minus_ripen_disguise_and_sand_spit_match_j
     );
     assert_eq!(
         result.hit_rolls[1],
-        vec![39, 39, 40, 40, 40, 41, 41, 42, 42, 43, 43, 44, 44, 45, 45, 46]
+        vec![20, 20, 20, 21, 21, 21, 21, 22, 22, 22, 22, 23, 23, 23, 23, 24]
     );
 }
 
@@ -795,8 +803,8 @@ fn missing_champions_entry_and_defensive_abilities_affect_damage() {
         tackle.clone(),
         Field::default(),
     );
-    assert!(blocked.min_damage > lowered.min_damage);
-    assert!(blocked
+    assert_eq!(blocked.damage_rolls, lowered.damage_rolls);
+    assert!(!blocked
         .applied_modifiers
         .iter()
         .any(|modifier| modifier.label == "Flower Veil blocked Intimidate"));
@@ -997,8 +1005,8 @@ fn additional_champions_abilities_that_change_damage_state_are_modeled() {
     );
     speed_boost.ability_on = false;
     let normal_speed = calc(speed_boost, slower_defender, electro_ball, Field::default());
-    assert!(boosted_speed.min_damage > normal_speed.min_damage);
-    assert!(boosted_speed
+    assert_eq!(boosted_speed.damage_rolls, normal_speed.damage_rolls);
+    assert!(!boosted_speed
         .applied_modifiers
         .iter()
         .any(|modifier| modifier.label == "Speed Boost"));
@@ -1017,8 +1025,8 @@ fn additional_champions_abilities_that_change_damage_state_are_modeled() {
     );
     opportunist.ability_on = false;
     let uncopied = calc(opportunist, boosted_target, psychic, Field::default());
-    assert!(copied.min_damage > uncopied.min_damage);
-    assert!(copied
+    assert_eq!(copied.damage_rolls, uncopied.damage_rolls);
+    assert!(!copied
         .applied_modifiers
         .iter()
         .any(|modifier| modifier.label == "Opportunist"));
@@ -1662,7 +1670,7 @@ fn healing_items_can_trigger_between_multi_hit_hits() {
 }
 
 #[test]
-fn focus_sash_prevents_a_full_hp_ohko_once() {
+fn reference_ko_projection_does_not_model_focus_sash() {
     let mut attacker = stat_100_mon("Attacker", PokemonType::Fighting);
     attacker.level = 100;
     let mut defender = stat_100_mon("Defender", PokemonType::Normal);
@@ -1673,8 +1681,8 @@ fn focus_sash_prevents_a_full_hp_ohko_once() {
 
     let result = calc(attacker, defender, seismic_toss, Field::default());
     assert_eq!(result.damage_rolls, vec![100]);
-    assert_eq!(result.ko_chance, Some(0.0));
-    assert_eq!(result.ko_chance_by_move_use, vec![0.0, 1.0, 1.0, 1.0]);
+    assert_eq!(result.ko_chance, Some(1.0));
+    assert_eq!(result.ko_chance_by_move_use, vec![1.0, 1.0, 1.0, 1.0]);
 }
 
 #[test]
@@ -1768,7 +1776,7 @@ fn leech_seed_tick_is_counted_after_damage_for_ko_odds() {
 }
 
 #[test]
-fn parental_bond_second_hit_uses_half_final_modifier() {
+fn parental_bond_second_hit_uses_gen_10_quarter_general_modifier() {
     let mut attacker = stat_100_mon("Kangaskhan-Mega", PokemonType::Normal);
     attacker.ability = Ability::ParentalBond;
     let defender = stat_100_mon("Defender", PokemonType::Psychic);
@@ -1781,10 +1789,10 @@ fn parental_bond_second_hit_uses_half_final_modifier() {
     );
     assert_eq!(
         result.hit_rolls[1],
-        vec![12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 14]
+        vec![6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7]
     );
-    assert_eq!(result.min_damage, 36);
-    assert_eq!(result.max_damage, 42);
+    assert_eq!(result.min_damage, 30);
+    assert_eq!(result.max_damage, 35);
 }
 
 #[test]
@@ -2404,6 +2412,57 @@ fn champions_item_json_names_align_with_typed_item_variants() {
         Item::Drampanite,
         Item::Scovillainite,
         Item::Glimmoranite,
+        Item::LumBerry,
+        Item::SitrusBerry,
+        Item::WhiteHerb,
+        Item::QuickClaw,
+        Item::KingsRock,
+        Item::FocusBand,
+        Item::ChoiceScarf,
+        Item::BrightPowder,
+        Item::Aggronite,
+        Item::Abomasite,
+        Item::Gyaradosite,
+        Item::Heracronite,
+        Item::Manectite,
+        Item::Garchompite,
+        Item::Steelixite,
+        Item::Beedrillite,
+        Item::Chesnaughtite,
+        Item::Delphoxite,
+        Item::Greninjite,
+        Item::Floettite,
+        Item::BigRoot,
+        Item::DampRock,
+        Item::ExpertBelt,
+        Item::HeatRock,
+        Item::IcyRock,
+        Item::IronBall,
+        Item::LifeOrb,
+        Item::LightClay,
+        Item::Metronome,
+        Item::MuscleBand,
+        Item::ShedShell,
+        Item::SmoothRock,
+        Item::WideLens,
+        Item::WiseGlasses,
+        Item::ZoomLens,
+        Item::RaichuniteX,
+        Item::RaichuniteY,
+        Item::Falinksite,
+        Item::Staraptite,
+        Item::Blazikenite,
+        Item::Mawilite,
+        Item::Swampertite,
+        Item::Sceptilite,
+        Item::Metagrossite,
+        Item::Scolipite,
+        Item::Scraftinite,
+        Item::Eelektrossite,
+        Item::Pyroarite,
+        Item::Malamarite,
+        Item::Barbaracite,
+        Item::Dragalgite,
     ];
     let variant_names = variants
         .into_iter()
@@ -2423,12 +2482,12 @@ fn champions_regulation_m_a_roster_json_is_valid_and_unique() {
         "../data/champions/regulation_m_a_pokemon.json"
     ))
     .expect("roster JSON");
-    let unique = pokemon.iter().collect::<HashSet<_>>();
+    let unique = pokemon.iter().map(String::as_str).collect::<HashSet<_>>();
 
     assert_eq!(pokemon.len(), 209);
     assert_eq!(unique.len(), pokemon.len());
-    assert!(unique.contains(&"Venusaur".to_string()));
-    assert!(unique.contains(&"Hydrapple".to_string()));
+    assert!(unique.contains("Venusaur"));
+    assert!(unique.contains("Hydrapple"));
 }
 
 #[test]
@@ -2601,6 +2660,95 @@ fn public_champions_lists_match_vendored_json_sources() {
 }
 
 #[test]
+fn pinned_reference_inventory_is_complete_and_battle_ready() {
+    use damage_calc::data::champions::{
+        CHAMPIONS_REFERENCE_ABILITIES, CHAMPIONS_REFERENCE_MOVES, CHAMPIONS_REFERENCE_SETS,
+        CHAMPIONS_REFERENCE_SPECIES,
+    };
+
+    assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 315);
+    assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 496);
+    assert_eq!(damage_calc::data::champions::CHAMPIONS_ITEMS.len(), 148);
+    assert_eq!(CHAMPIONS_REFERENCE_ABILITIES.len(), 201);
+    assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 123);
+
+    for set in CHAMPIONS_REFERENCE_SETS {
+        let pokemon = set
+            .pokemon_()
+            .unwrap_or_else(|| panic!("missing species for {} ({})", set.pokemon, set.name));
+        assert_eq!(pokemon.name, set.pokemon);
+        let moves = set
+            .moves_()
+            .unwrap_or_else(|| panic!("missing move for {} ({})", set.pokemon, set.name));
+        assert_eq!(moves.len(), 4);
+    }
+}
+
+#[test]
+fn every_pinned_reference_set_move_calculates_without_error() {
+    use damage_calc::data::champions::CHAMPIONS_REFERENCE_SETS;
+
+    for set in CHAMPIONS_REFERENCE_SETS {
+        let attacker = set.pokemon_().expect("set Pokemon");
+        let defender = set.pokemon_().expect("set Pokemon");
+        for move_ in set.moves_().expect("set moves") {
+            let result = calculate_damage(CalcInput {
+                attacker: attacker.clone(),
+                defender: defender.clone(),
+                move_,
+                field: Field::default(),
+                ruleset: Ruleset::Champions,
+            })
+            .unwrap_or_else(|error| panic!("{} ({}): {error}", set.pokemon, set.name));
+            assert_eq!(
+                result.damage_rolls.first().copied(),
+                Some(result.min_damage)
+            );
+            assert_eq!(result.damage_rolls.last().copied(), Some(result.max_damage));
+            assert!(result
+                .damage_rolls
+                .windows(2)
+                .all(|pair| pair[0] <= pair[1]));
+            assert_eq!(result.ko_chance_by_move_use.len(), 4);
+            assert!(result
+                .ko_chance_by_move_use
+                .iter()
+                .all(|chance| (0.0..=1.0).contains(chance)));
+            assert!(result
+                .ko_chance_by_move_use
+                .windows(2)
+                .all(|pair| pair[0] <= pair[1]));
+            assert!(result.resolved_move.is_some());
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn public_batch_schema_round_trips_with_serde() {
+    let pokemon = stat_100_mon("Pokemon", PokemonType::Normal);
+    let no_move = Move::new("(No Move)", 0, PokemonType::Typeless, Category::Status);
+    let input = BatchCalcInput {
+        left: pokemon.clone(),
+        right: pokemon,
+        left_moves: std::array::from_fn(|_| no_move.clone()),
+        right_moves: std::array::from_fn(|_| no_move.clone()),
+        left_to_right_field: Field::default(),
+        right_to_left_field: Field::default(),
+        ruleset: Ruleset::Champions,
+    };
+    let json = serde_json::to_string(&input).expect("serialize batch input");
+    let round_trip: BatchCalcInput = serde_json::from_str(&json).expect("deserialize batch input");
+    assert_eq!(round_trip, input);
+
+    let result = calculate_all_moves(input).expect("batch calculation");
+    let json = serde_json::to_string(&result).expect("serialize batch result");
+    let round_trip: damage_calc::BatchDamageResult =
+        serde_json::from_str(&json).expect("deserialize batch result");
+    assert_eq!(round_trip, result);
+}
+
+#[test]
 fn duplicate_monotype_entries_are_treated_as_single_type() {
     let mut kingambit = Pokemon::champions(
         "Kingambit",
@@ -2691,4 +2839,175 @@ fn champions_missing_item_mechanics_match_js() {
         .applied_modifiers
         .iter()
         .any(|modifier| modifier.label == "Knock Off"));
+}
+
+#[test]
+fn switch_in_hazards_are_applied_before_ko_projection() {
+    let mut attacker = stat_100_mon("Attacker", PokemonType::Fighting);
+    attacker.level = 88;
+    let mut defender = stat_100_mon("Defender", PokemonType::Normal);
+    defender.max_hp_override = Some(100);
+    defender.current_hp = Some(100);
+    let seismic_toss = Move::new("Seismic Toss", 1, PokemonType::Fighting, Category::Physical);
+
+    let without_hazards = calc(
+        attacker.clone(),
+        defender.clone(),
+        seismic_toss.clone(),
+        Field::default(),
+    );
+    assert_eq!(without_hazards.ko_chance, Some(0.0));
+
+    let mut rocks = Field::default();
+    rocks.defender_side.stealth_rock = true;
+    assert_eq!(
+        calc(
+            attacker.clone(),
+            defender.clone(),
+            seismic_toss.clone(),
+            rocks
+        )
+        .ko_chance,
+        Some(1.0)
+    );
+
+    let mut spikes = Field::default();
+    spikes.defender_side.spikes = 1;
+    assert_eq!(
+        calc(attacker, defender, seismic_toss, spikes).ko_chance,
+        Some(1.0)
+    );
+}
+
+#[test]
+fn salt_cure_and_initial_toxic_counter_affect_ko_projection() {
+    let mut defender = stat_100_mon("Defender", PokemonType::Normal);
+    defender.max_hp_override = Some(100);
+    defender.current_hp = Some(100);
+
+    let mut salt_attacker = stat_100_mon("Attacker", PokemonType::Fighting);
+    salt_attacker.level = 94;
+    let seismic_toss = Move::new("Seismic Toss", 1, PokemonType::Fighting, Category::Physical);
+    let mut salt = Field::default();
+    salt.defender_side.salt_cure = true;
+    assert_eq!(
+        calc(salt_attacker, defender.clone(), seismic_toss.clone(), salt).ko_chance,
+        Some(1.0)
+    );
+
+    let mut toxic_attacker = stat_100_mon("Attacker", PokemonType::Fighting);
+    toxic_attacker.level = 70;
+    defender.status = StatusCondition::BadlyPoisoned;
+    defender.toxic_counter = 5;
+    assert_eq!(
+        calc(toxic_attacker, defender, seismic_toss, Field::default()).ko_chance,
+        Some(1.0)
+    );
+}
+
+#[test]
+fn psychic_noise_prevents_leftovers_recovery_in_ko_projection() {
+    let mut attacker = stat_100_mon("Attacker", PokemonType::Dark);
+    attacker.level = 50;
+    let mut defender = stat_100_mon("Defender", PokemonType::Normal);
+    defender.max_hp_override = Some(100);
+    defender.current_hp = Some(100);
+    defender.item = Item::Leftovers;
+
+    let ordinary = Move::new("Psychic", 130, PokemonType::Psychic, Category::Special);
+    let ordinary_result = calc(
+        attacker.clone(),
+        defender.clone(),
+        ordinary,
+        Field::default(),
+    );
+    assert!(ordinary_result.ko_chance_by_move_use[1] < 1.0);
+
+    let psychic_noise = Move::new(
+        "Psychic Noise",
+        130,
+        PokemonType::Psychic,
+        Category::Special,
+    );
+    let noise_result = calc(attacker, defender, psychic_noise, Field::default());
+    assert_eq!(noise_result.ko_chance_by_move_use[1], 1.0);
+}
+
+#[test]
+fn batch_calculation_matches_single_calls_and_shares_entry_weather() {
+    let mut left = stat_100_mon("Left", PokemonType::Fire);
+    left.ability = Ability::Drought;
+    let right = stat_100_mon("Right", PokemonType::Water);
+    let left_move = Move::new("Flamethrower", 90, PokemonType::Fire, Category::Special);
+    let right_move = Move::new("Surf", 90, PokemonType::Water, Category::Special);
+    let no_move = Move::new("(No Move)", 0, PokemonType::Typeless, Category::Status);
+
+    let batch = calculate_all_moves(BatchCalcInput {
+        left: left.clone(),
+        right: right.clone(),
+        left_moves: [
+            left_move.clone(),
+            no_move.clone(),
+            no_move.clone(),
+            no_move.clone(),
+        ],
+        right_moves: [right_move, no_move.clone(), no_move.clone(), no_move],
+        left_to_right_field: Field::default(),
+        right_to_left_field: Field::default(),
+        ruleset: Ruleset::Champions,
+    })
+    .expect("batch calculation");
+
+    let single = calc(left, right, left_move, Field::default());
+    assert_eq!(batch.left[0].damage_rolls, single.damage_rolls);
+    assert!(batch.right[0]
+        .applied_modifiers
+        .iter()
+        .any(|modifier| modifier.label == "weather damage drop"));
+    assert_eq!(batch.left.len(), 4);
+    assert_eq!(batch.right.len(), 4);
+}
+
+#[test]
+fn result_reports_resolved_move_and_signed_pain_split_delta() {
+    let attacker = stat_100_mon("Attacker", PokemonType::Normal);
+    let defender = stat_100_mon("Defender", PokemonType::Normal);
+    let body_slam = Move::new("Body Slam", 85, PokemonType::Normal, Category::Physical);
+    let result = calc(
+        attacker.clone(),
+        defender.clone(),
+        body_slam,
+        Field::default(),
+    );
+    let resolved = result.resolved_move.expect("resolved move");
+    assert_eq!(resolved.name, "Body Slam");
+    assert_eq!(resolved.base_power, 85);
+    assert_eq!(result.outcome, DamageOutcome::Damage);
+
+    let pain_split = Move::new("Pain Split", 0, PokemonType::Normal, Category::Status);
+    let mut low_attacker = attacker.clone();
+    low_attacker.max_hp_override = Some(100);
+    low_attacker.current_hp = Some(40);
+    let mut full_defender = defender.clone();
+    full_defender.max_hp_override = Some(100);
+    full_defender.current_hp = Some(100);
+    let damage = calc(
+        low_attacker,
+        full_defender,
+        pain_split.clone(),
+        Field::default(),
+    );
+    assert_eq!(damage.outcome, DamageOutcome::HpShare);
+    assert_eq!(damage.defender_hp_delta, Some(30));
+    assert_eq!(damage.damage_rolls, vec![30]);
+
+    let mut full_attacker = attacker;
+    full_attacker.max_hp_override = Some(100);
+    full_attacker.current_hp = Some(100);
+    let mut low_defender = defender;
+    low_defender.max_hp_override = Some(100);
+    low_defender.current_hp = Some(40);
+    let healing = calc(full_attacker, low_defender, pain_split, Field::default());
+    assert_eq!(healing.defender_hp_delta, Some(-30));
+    assert_eq!(healing.damage_rolls, vec![0]);
 }

@@ -485,6 +485,25 @@ pub enum Ability {
     WhiteSmoke,
 }
 
+impl Ability {
+    /// Default state of the browser calculator's ability toggle.
+    pub const fn is_on_by_default(self) -> bool {
+        !matches!(
+            self,
+            Self::None
+                | Self::FlashFire
+                | Self::Plus
+                | Self::Minus
+                | Self::Trace
+                | Self::Stakeout
+                | Self::SandSpit
+                | Self::BattleBond
+                | Self::Electromorphosis
+                | Self::WindPower
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Item {
@@ -494,6 +513,8 @@ pub enum Item {
     AdrenalineOrb,
     AssaultVest,
     AirBalloon,
+    BigRoot,
+    BrightPowder,
     ChoiceBand,
     ChoiceScarf,
     ChoiceSpecs,
@@ -504,14 +525,18 @@ pub enum Item {
     ElectricSeed,
     Eviolite,
     FloatStone,
+    FocusBand,
     GrassySeed,
     HearthflameMask,
     IronBall,
+    KingsRock,
     KlutzSuppressed,
     Leftovers,
+    LightClay,
     LightBall,
     LifeOrb,
     MentalHerb,
+    Metronome,
     MistySeed,
     MuscleBand,
     WiseGlasses,
@@ -520,9 +545,18 @@ pub enum Item {
     PsychicSeed,
     RingTarget,
     ScopeLens,
+    ShedShell,
     ShellBell,
+    SmoothRock,
     UtilityUmbrella,
+    WhiteHerb,
+    WideLens,
     WellspringMask,
+    ZoomLens,
+    DampRock,
+    HeatRock,
+    IcyRock,
+    QuickClaw,
     FlamePlate,
     SplashPlate,
     ZapPlate,
@@ -559,11 +593,39 @@ pub enum Item {
     FairyFeather,
     FocusSash,
     Venusaurite,
+    Abomasite,
+    Aggronite,
+    Barbaracite,
+    Beedrillite,
+    Blazikenite,
     CharizarditeX,
     CharizarditeY,
     Blastoisinite,
     Pidgeotite,
     Clefablite,
+    Chesnaughtite,
+    Delphoxite,
+    Dragalgite,
+    Eelektrossite,
+    Falinksite,
+    Floettite,
+    Garchompite,
+    Greninjite,
+    Gyaradosite,
+    Heracronite,
+    Malamarite,
+    Manectite,
+    Mawilite,
+    Metagrossite,
+    Pyroarite,
+    RaichuniteX,
+    RaichuniteY,
+    Sceptilite,
+    Scolipite,
+    Scraftinite,
+    Staraptite,
+    Steelixite,
+    Swampertite,
     Alakazite,
     Victreebelite,
     Slowbronite,
@@ -877,6 +939,8 @@ pub struct Pokemon {
     pub ability: Ability,
     pub item: Item,
     pub status: StatusCondition,
+    /// Current badly-poisoned turn counter. Ignored unless status is badly poisoned.
+    pub toxic_counter: u8,
     pub current_hp: Option<u16>,
     pub max_hp_override: Option<u16>,
     pub is_terastalized: bool,
@@ -913,6 +977,7 @@ impl Pokemon {
             ability: Ability::None,
             item: Item::None,
             status: StatusCondition::Healthy,
+            toxic_counter: 1,
             current_hp: None,
             max_hp_override: None,
             is_terastalized: false,
@@ -978,8 +1043,12 @@ pub struct Move {
     pub is_double_power: bool,
     pub countered_damage_rolls: Option<Vec<u16>>,
     pub countered_move_category: Option<Category>,
+    pub countered_move_index: u8,
     pub times_affected: u8,
     pub current_triple_hit: Option<u8>,
+    /// Reference move metadata marks this move as having a selectable hit range.
+    pub is_multi_hit: bool,
+    pub is_parental_bond_child: bool,
     pub hits: u8,
 }
 
@@ -1022,8 +1091,11 @@ impl Move {
             is_double_power: false,
             countered_damage_rolls: None,
             countered_move_category: None,
+            countered_move_index: 0,
             times_affected: 0,
             current_triple_hit: None,
+            is_multi_hit: false,
+            is_parental_bond_child: false,
             hits: 1,
         }
     }
@@ -1044,6 +1116,9 @@ pub struct SideConditions {
     pub light_screen: bool,
     pub aurora_veil: bool,
     pub friend_guard: bool,
+    pub stealth_rock: bool,
+    pub spikes: u8,
+    pub salt_cure: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

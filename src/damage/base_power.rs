@@ -26,11 +26,7 @@ pub(super) fn calc_base_power(
             bp
         }
         "Electro Ball" => {
-            let ratio = if defender_speed == 0 {
-                0
-            } else {
-                attacker_speed / defender_speed
-            };
+            let ratio = attacker_speed.checked_div(defender_speed).unwrap_or(0);
             let bp = if ratio >= 4 {
                 150
             } else if ratio >= 3 {
@@ -236,9 +232,17 @@ pub(super) fn calc_base_power(
             bp
         }
         _ if move_.is_double_power
-            && !matches!(
+            && matches!(
                 move_.name.as_str(),
-                "Retaliate" | "Fusion Bolt" | "Fusion Flare" | "Lash Out"
+                "Assurance"
+                    | "Avalanche"
+                    | "Bolt Beak"
+                    | "Fickle Beam"
+                    | "Fishious Rend"
+                    | "Payback"
+                    | "Round"
+                    | "Stomping Tantrum"
+                    | "Temper Flare"
             ) =>
         {
             modifiers.push(ModifierBreakdown::new("double-power move flag", MOD_DOUBLE));

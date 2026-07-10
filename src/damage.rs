@@ -36,11 +36,51 @@ pub struct CalcInput {
     pub ruleset: Ruleset,
 }
 
+/// Four-move, two-direction calculation input matching `CALCULATE_ALL_MOVES_SV`.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct BatchCalcInput {
+    pub left: Pokemon,
+    pub right: Pokemon,
+    pub left_moves: [Move; 4],
+    pub right_moves: [Move; 4],
+    /// Field oriented with `left` attacking `right`.
+    pub left_to_right_field: Field,
+    /// Field oriented with `right` attacking `left`.
+    pub right_to_left_field: Field,
+    pub ruleset: Ruleset,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ModifierBreakdown {
     pub label: String,
     pub modifier: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ResolvedMove {
+    pub name: String,
+    pub type_: PokemonType,
+    pub category: Category,
+    pub base_power: u16,
+    pub hits: u8,
+    pub is_critical: bool,
+    pub is_spread: bool,
+    pub makes_contact: bool,
+    pub is_priority: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum DamageOutcome {
+    Damage,
+    Status,
+    ImmuneOrFailed,
+    Fixed,
+    Counter,
+    HpShare,
 }
 
 impl ModifierBreakdown {
@@ -67,8 +107,23 @@ pub struct DamageResult {
     /// recovery" without reimplementing item-trigger timing.
     pub ko_chance_by_move_use: Vec<f32>,
     pub ko_chance: Option<f32>,
+    pub outcome: DamageOutcome,
+    pub resolved_move: Option<ResolvedMove>,
+    /// Signed defender HP change for effects such as Pain Split.
+    /// Positive values damage the defender; negative values heal it.
+    pub defender_hp_delta: Option<i32>,
     pub applied_modifiers: Vec<ModifierBreakdown>,
     pub debug: Vec<String>,
+}
+
+/// Results for all four moves in both directions after one preprocessing pass.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct BatchDamageResult {
+    pub left: Vec<DamageResult>,
+    pub right: Vec<DamageResult>,
+    pub left_state: Pokemon,
+    pub right_state: Pokemon,
 }
 
 const KO_CHANCE_MAX_USES: usize = 4;
@@ -80,6 +135,125 @@ pub fn calculate_damage(input: CalcInput) -> Result<DamageResult, CalcError> {
     }
 }
 
+pub fn calculate_all_moves(input: BatchCalcInput) -> Result<BatchDamageResult, CalcError> {
+    let mut left = input.left;
+    let mut right = input.right;
+    let mut field = input.left_to_right_field;
+    let mut entry_modifiers = Vec::new();
+    preprocess_battle_state(&mut left, &mut right, &mut field, &mut entry_modifiers)?;
+    let mut reverse_field = input.right_to_left_field;
+    reverse_field.weather = field.weather;
+    reverse_field.terrain = field.terrain;
+    reverse_field.neutralizing_gas = field.neutralizing_gas;
+    if entry_modifiers
+        .iter()
+        .any(|modifier| modifier.label == "Screen Cleaner")
+    {
+        reverse_field.defender_side.reflect = false;
+        reverse_field.defender_side.light_screen = false;
+        reverse_field.defender_side.aurora_veil = false;
+    }
+    let left_moves = input.left_moves;
+    let right_moves = input.right_moves;
+
+    let mut left_results = Vec::with_capacity(4);
+    for mut move_ in left_moves.clone() {
+        hydrate_counter_move(
+            &mut move_,
+            &right_moves,
+            &right,
+            &left,
+            reverse_field,
+            input.ruleset,
+            &entry_modifiers,
+        )?;
+        left_results.push(calculate_champions_damage_preprocessed(
+            CalcInput {
+                attacker: left.clone(),
+                defender: right.clone(),
+                move_,
+                field,
+                ruleset: input.ruleset,
+            },
+            entry_modifiers.clone(),
+        )?);
+    }
+
+    let mut right_results = Vec::with_capacity(4);
+    for mut move_ in right_moves {
+        hydrate_counter_move(
+            &mut move_,
+            &left_moves,
+            &left,
+            &right,
+            field,
+            input.ruleset,
+            &entry_modifiers,
+        )?;
+        right_results.push(calculate_champions_damage_preprocessed(
+            CalcInput {
+                attacker: right.clone(),
+                defender: left.clone(),
+                move_,
+                field: reverse_field,
+                ruleset: input.ruleset,
+            },
+            entry_modifiers.clone(),
+        )?);
+    }
+
+    Ok(BatchDamageResult {
+        left: left_results,
+        right: right_results,
+        left_state: left,
+        right_state: right,
+    })
+}
+
+fn hydrate_counter_move(
+    move_: &mut Move,
+    opponent_moves: &[Move; 4],
+    opponent: &Pokemon,
+    user: &Pokemon,
+    field: Field,
+    ruleset: Ruleset,
+    entry_modifiers: &[ModifierBreakdown],
+) -> Result<(), CalcError> {
+    if !matches!(
+        move_.name.as_str(),
+        "Counter" | "Mirror Coat" | "Metal Burst" | "Comeuppance"
+    ) || move_.countered_damage_rolls.is_some()
+    {
+        return Ok(());
+    }
+    let Some(countered_move) = opponent_moves.get(move_.countered_move_index as usize) else {
+        return Ok(());
+    };
+    if matches!(
+        countered_move.name.as_str(),
+        "Counter" | "Mirror Coat" | "Metal Burst" | "Comeuppance"
+    ) {
+        return Ok(());
+    }
+    let result = calculate_champions_damage_preprocessed(
+        CalcInput {
+            attacker: opponent.clone(),
+            defender: user.clone(),
+            move_: countered_move.clone(),
+            field,
+            ruleset,
+        },
+        entry_modifiers.to_vec(),
+    )?;
+    move_.countered_move_category = Some(countered_move.category);
+    move_.countered_damage_rolls = Some(if result.hit_rolls.len() > 1 {
+        result.hit_rolls.last().cloned().unwrap_or_default()
+    } else {
+        result.damage_rolls
+    });
+    Ok(())
+}
+
 fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, CalcError> {
     apply_move_metadata_defaults(&mut input.move_);
     let mut entry_modifiers = Vec::new();
@@ -89,6 +263,14 @@ fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, Calc
         &mut input.field,
         &mut entry_modifiers,
     )?;
+    calculate_champions_damage_preprocessed(input, entry_modifiers)
+}
+
+fn calculate_champions_damage_preprocessed(
+    mut input: CalcInput,
+    entry_modifiers: Vec<ModifierBreakdown>,
+) -> Result<DamageResult, CalcError> {
+    apply_move_metadata_defaults(&mut input.move_);
     apply_hit_count_defaults(&mut input.move_, input.attacker.ability);
 
     let requested_hits = input.move_.hits.max(1);
@@ -115,6 +297,8 @@ fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, Calc
     let mut hit_rolls = Vec::with_capacity(hit_count as usize);
     let mut applied_modifiers = entry_modifiers;
     let mut debug = vec![format!("hits={hit_count}")];
+    let mut resolved_move = None;
+    let mut outcome = DamageOutcome::Damage;
     let mut attacker = input.attacker;
     let mut defender = input.defender;
     let initial_defender_item = defender.item;
@@ -125,9 +309,9 @@ fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, Calc
         if matches!(hit_move.name.as_str(), "Triple Kick" | "Triple Axel") {
             hit_move.current_triple_hit = Some(hit_index + 1);
         }
-        let mut hit_attacker = attacker.clone();
+        let hit_attacker = attacker.clone();
         if parental_bond_hits && hit_index == 1 {
-            hit_attacker.custom_final_mods.push(MOD_HALF);
+            hit_move.is_parental_bond_child = true;
         }
         let hit_result = calculate_champions_single_hit(
             CalcInput {
@@ -140,6 +324,10 @@ fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, Calc
             Vec::new(),
         )?;
         applied_modifiers.extend(hit_result.applied_modifiers.clone());
+        if resolved_move.is_none() {
+            resolved_move = hit_result.resolved_move.clone();
+            outcome = hit_result.outcome;
+        }
         debug.extend(hit_result.debug);
         hit_rolls.push(hit_result.damage_rolls);
 
@@ -166,8 +354,13 @@ fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, Calc
         defender_current_hp,
         defender_max_hp,
         initial_defender_item,
-        residual_effects(&defender, &field, defender_max_hp),
-        healing_item_suppressed(&input.move_, attacker.ability),
+        residual_effects(
+            &defender,
+            &field,
+            defender_max_hp,
+            input.move_.name == "Psychic Noise",
+        ),
+        healing_item_suppressed(&input.move_, &attacker),
         KO_CHANCE_MAX_USES,
     );
     let ko_chance = ko_chance_by_move_use.first().copied();
@@ -180,6 +373,9 @@ fn calculate_champions_damage(mut input: CalcInput) -> Result<DamageResult, Calc
         percent_range,
         ko_chance_by_move_use,
         ko_chance,
+        outcome,
+        resolved_move,
+        defender_hp_delta: None,
         applied_modifiers,
         debug,
     })
@@ -221,8 +417,41 @@ fn calculate_champions_single_hit(
 
     apply_move_metadata_defaults(&mut move_);
     apply_move_type_changes(&mut move_, &attacker, &field);
-    apply_priority_defaults(&mut move_, &attacker, attacker_current_hp, attacker_max_hp);
+    apply_priority_defaults(
+        &mut move_,
+        &attacker,
+        attacker_current_hp,
+        attacker_max_hp,
+        &field,
+    );
+    if move_.name == "Expanding Force"
+        && field.terrain == crate::types::Terrain::Psychic
+        && is_grounded(&attacker, &field)
+    {
+        move_.is_spread = true;
+    }
     let ate_ize_boosted = apply_ability_type_change(&mut move_, &attacker, &mut modifiers);
+
+    if move_.name == "Pain Split" && attacker.item != Item::AssaultVest {
+        let hp_delta = (defender_current_hp as i32 - attacker_current_hp as i32).div_euclid(2);
+        let damage = hp_delta.max(0) as u16;
+        let mut result = single_damage_result(
+            damage,
+            DamageResolutionContext {
+                defender_max_hp,
+                defender_current_hp,
+                defender_item: defender.item,
+                residual: residual_effects(&defender, &field, defender_max_hp, false),
+                healing_suppressed: false,
+            },
+            modifiers,
+            debug,
+        );
+        result.outcome = DamageOutcome::HpShare;
+        result.resolved_move = Some(resolved_move(&move_, move_.base_power, false));
+        result.defender_hp_delta = Some(hp_delta);
+        return Ok(result);
+    }
 
     if move_.base_power == 0 || move_.category == Category::Status {
         return Ok(DamageResult {
@@ -233,6 +462,9 @@ fn calculate_champions_single_hit(
             percent_range: (0.0, 0.0),
             ko_chance_by_move_use: vec![0.0; KO_CHANCE_MAX_USES],
             ko_chance: Some(0.0),
+            outcome: DamageOutcome::Status,
+            resolved_move: Some(resolved_move(&move_, move_.base_power, false)),
+            defender_hp_delta: None,
             applied_modifiers: modifiers,
             debug,
         });
@@ -300,23 +532,10 @@ fn calculate_champions_single_hit(
         type_effectiveness,
         &mut modifiers,
     ) {
-        return Ok(zero_damage(defender_max_hp, modifiers, debug));
-    }
-
-    if def_ability == Ability::Disguise && defender.ability_on {
-        modifiers.push(ModifierBreakdown::new("Disguise", 0));
-        return Ok(single_damage_result(
-            (defender_max_hp / 8).max(1),
-            DamageResolutionContext {
-                defender_max_hp,
-                defender_current_hp,
-                defender_item: defender.item,
-                residual: residual_effects(&defender, &field, defender_max_hp),
-                healing_suppressed: healing_item_suppressed(&move_, attacker.ability),
-            },
-            modifiers,
-            debug,
-        ));
+        let mut result = zero_damage(defender_max_hp, modifiers, debug);
+        result.outcome = DamageOutcome::ImmuneOrFailed;
+        result.resolved_move = Some(resolved_move(&move_, move_.base_power, false));
+        return Ok(result);
     }
 
     if let Some(result) = set_damage_result(
@@ -331,6 +550,11 @@ fn calculate_champions_single_hit(
         modifiers.clone(),
         debug.clone(),
     ) {
+        let mut result = result;
+        result.resolved_move = Some(resolved_move(&move_, move_.base_power, false));
+        if result.outcome == DamageOutcome::Damage {
+            result.outcome = DamageOutcome::Fixed;
+        }
         return Ok(result);
     }
 
@@ -358,7 +582,10 @@ fn calculate_champions_single_hit(
         &mut modifiers,
     )?;
     if base_power == 0 {
-        return Ok(zero_damage(defender_max_hp, modifiers, debug));
+        let mut result = zero_damage(defender_max_hp, modifiers, debug);
+        result.outcome = DamageOutcome::ImmuneOrFailed;
+        result.resolved_move = Some(resolved_move(&move_, 0, is_critical));
+        return Ok(result);
     }
     let bp_mods = calc_bp_mods(
         &move_,
@@ -372,7 +599,11 @@ fn calculate_champions_single_hit(
         defender_max_hp,
         &mut modifiers,
     );
-    let base_power = apply_mod(base_power as i32, chain_mods(&bp_mods)).max(1);
+    let mut base_power = apply_mod(base_power as i32, chain_mods(&bp_mods)).max(1);
+    if base_power < 60 && can_tera_boost_to_sixty(&move_, &attacker) {
+        base_power = 60;
+        modifiers.push(ModifierBreakdown::new("Tera 60 BP floor", 0));
+    }
 
     let hits_physical = move_.category == Category::Physical || move_.deals_physical_damage;
     let attack_stat = if move_.name == "Body Press" {
@@ -395,10 +626,31 @@ fn calculate_champions_single_hit(
         (attacker_stats, attack_modified_stats, attacker.boosts)
     };
 
+    let mid_move_attack_boost =
+        if move_.name == "Spectral Thief" && defender.boosts.get(attack_stat) > 0 {
+            Some((attacker.boosts.get(attack_stat) + defender.boosts.get(attack_stat)).min(6))
+        } else if matches!(move_.name.as_str(), "Meteor Beam" | "Electro Shot") {
+            let change = if attacker.ability == Ability::Contrary {
+                -1
+            } else {
+                1
+            };
+            let current = attacker.boosts.get(attack_stat);
+            (current + change)
+                .clamp(-6, 6)
+                .ne(&current)
+                .then_some(current + change)
+        } else {
+            None
+        };
+
     let mut attack =
         if def_ability == Ability::Unaware && attack_source_boosts.get(attack_stat) != 0 {
             modifiers.push(ModifierBreakdown::new("Unaware ignores attack boost", 0));
             attack_source_raw.get(attack_stat)
+        } else if let Some(boost) = mid_move_attack_boost {
+            modifiers.push(ModifierBreakdown::new("mid-move attack boost", 0));
+            modified_stat(attack_source_raw.get(attack_stat), boost)?
         } else if is_critical && attack_source_boosts.get(attack_stat) < 0 {
             attack_source_raw.get(attack_stat)
         } else {
@@ -461,6 +713,10 @@ fn calculate_champions_single_hit(
     if field.format != Format::Singles && move_.is_spread && !move_.targets_single_target {
         base_damage = apply_mod(base_damage, MOD_THREE_QUARTERS);
         modifiers.push(ModifierBreakdown::new("spread", MOD_THREE_QUARTERS));
+    }
+    if move_.is_parental_bond_child {
+        base_damage = apply_mod(base_damage, 0x0400);
+        modifiers.push(ModifierBreakdown::new("Parental Bond child", 0x0400));
     }
 
     if weather_damage_boost(
@@ -553,8 +809,13 @@ fn calculate_champions_single_hit(
         defender_current_hp,
         defender_max_hp,
         defender.item,
-        residual_effects(&defender, &field, defender_max_hp),
-        healing_item_suppressed(&move_, attacker.ability),
+        residual_effects(
+            &defender,
+            &field,
+            defender_max_hp,
+            move_.name == "Psychic Noise",
+        ),
+        healing_item_suppressed(&move_, &attacker),
         KO_CHANCE_MAX_USES,
     );
     let ko_chance = ko_chance_by_move_use.first().copied();
@@ -567,6 +828,9 @@ fn calculate_champions_single_hit(
         percent_range,
         ko_chance_by_move_use,
         ko_chance,
+        outcome: DamageOutcome::Damage,
+        resolved_move: Some(resolved_move(&move_, base_power as u16, is_critical)),
+        defender_hp_delta: None,
         applied_modifiers: modifiers,
         debug,
     })
@@ -603,11 +867,15 @@ struct HealingItemRecovery {
 #[derive(Debug, Clone, Copy)]
 struct ResidualEffects {
     defender_ability: Ability,
+    initial_damage: u16,
+    initial_toxic_counter: u8,
     healing_or_damage: i16,
     burn_damage: u16,
     poison_damage: u16,
     toxic: bool,
     leech_seed_damage: u16,
+    salt_cure_damage: u16,
+    prevents_healing: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -640,11 +908,18 @@ fn ko_chances_after_move_uses(
     }
 
     let sequence_probability = 1.0 / sequence_count as f64;
+    if residual.initial_damage >= defender_current_hp {
+        return vec![1.0; max_uses];
+    }
     let mut active_states = HashMap::from([(
         KoState {
-            hp: defender_current_hp,
+            hp: defender_current_hp - residual.initial_damage,
             item: defender_item,
-            toxic_counter: if residual.toxic { 1 } else { 0 },
+            toxic_counter: if residual.toxic {
+                residual.initial_toxic_counter.max(1)
+            } else {
+                0
+            },
         },
         1.0f64,
     )]);
@@ -727,23 +1002,9 @@ fn visit_hit_sequence_outcomes(
 
     for damage in &hit_rolls[hit_index] {
         let mut next_state = state;
-        if focus_sash_survives_hit(next_state, *damage, defender_max_hp) {
-            next_state.hp = 1;
-            next_state.item = Item::None;
-            visit_hit_sequence_outcomes(
-                hit_rolls,
-                hit_index + 1,
-                next_state,
-                defender_max_hp,
-                defender_ability,
-                healing_suppressed,
-                on_outcome,
-            );
-            continue;
-        }
         next_state.hp = next_state.hp.saturating_sub(*damage);
         if next_state.hp == 0 {
-            on_outcome(None);
+            visit_remaining_ko_outcomes(hit_rolls, hit_index + 1, on_outcome);
             continue;
         }
         if !healing_suppressed {
@@ -771,15 +1032,31 @@ fn visit_hit_sequence_outcomes(
     }
 }
 
-fn focus_sash_survives_hit(state: KoState, damage: u16, defender_max_hp: u16) -> bool {
-    state.item == Item::FocusSash && state.hp == defender_max_hp && damage >= state.hp && damage > 0
+fn visit_remaining_ko_outcomes(
+    hit_rolls: &[Vec<u16>],
+    hit_index: usize,
+    on_outcome: &mut impl FnMut(Option<KoState>),
+) {
+    if hit_index == hit_rolls.len() {
+        on_outcome(None);
+        return;
+    }
+    for _ in &hit_rolls[hit_index] {
+        visit_remaining_ko_outcomes(hit_rolls, hit_index + 1, on_outcome);
+    }
 }
 
-fn residual_effects(defender: &Pokemon, field: &Field, defender_max_hp: u16) -> ResidualEffects {
+fn residual_effects(
+    defender: &Pokemon,
+    field: &Field,
+    defender_max_hp: u16,
+    prevents_healing: bool,
+) -> ResidualEffects {
     let mut healing_or_damage = 0i16;
     let residual_sixteenth = defender_max_hp / 16;
     let residual_eighth = defender_max_hp / 8;
     let magic_guard = defender.ability == Ability::MagicGuard;
+    let initial_damage = initial_hazard_damage(defender, field, defender_max_hp, magic_guard);
 
     match field.weather {
         Weather::Sun | Weather::HarshSun => {
@@ -836,35 +1113,34 @@ fn residual_effects(defender: &Pokemon, field: &Field, defender_max_hp: u16) -> 
     let mut burn_damage = 0;
     let mut poison_damage = 0;
     let mut toxic = false;
-    if !magic_guard {
-        match defender.status {
-            StatusCondition::Poisoned => {
-                if defender.ability == Ability::PoisonHeal {
-                    healing_or_damage += residual_eighth as i16;
-                } else {
-                    poison_damage = residual_eighth;
-                }
+    match defender.status {
+        StatusCondition::Poisoned => {
+            if defender.ability == Ability::PoisonHeal {
+                healing_or_damage += residual_eighth as i16;
+            } else if !magic_guard {
+                poison_damage = residual_eighth;
             }
-            StatusCondition::BadlyPoisoned => {
-                if defender.ability == Ability::PoisonHeal {
-                    healing_or_damage += residual_eighth as i16;
-                } else {
-                    toxic = true;
-                }
-            }
-            StatusCondition::Burned => {
-                burn_damage = if defender.ability == Ability::Heatproof {
-                    defender_max_hp / 16 / 2
-                } else {
-                    defender_max_hp / 16
-                };
-            }
-            StatusCondition::Healthy
-            | StatusCondition::Paralyzed
-            | StatusCondition::Asleep
-            | StatusCondition::Drowsy
-            | StatusCondition::Frozen => {}
         }
+        StatusCondition::BadlyPoisoned => {
+            if defender.ability == Ability::PoisonHeal {
+                healing_or_damage += residual_eighth as i16;
+            } else if !magic_guard {
+                toxic = true;
+            }
+        }
+        StatusCondition::Burned if !magic_guard => {
+            burn_damage = if defender.ability == Ability::Heatproof {
+                defender_max_hp / 16 / 2
+            } else {
+                defender_max_hp / 16
+            };
+        }
+        StatusCondition::Healthy
+        | StatusCondition::Paralyzed
+        | StatusCondition::Asleep
+        | StatusCondition::Drowsy
+        | StatusCondition::Frozen
+        | StatusCondition::Burned => {}
     }
 
     let leech_seed_damage =
@@ -873,15 +1149,65 @@ fn residual_effects(defender: &Pokemon, field: &Field, defender_max_hp: u16) -> 
         } else {
             0
         };
+    let salt_cure_damage = if field.defender_side.salt_cure && !magic_guard {
+        if defender.has_type(PokemonType::Water) || defender.has_type(PokemonType::Steel) {
+            defender_max_hp / 8
+        } else {
+            defender_max_hp / 16
+        }
+    } else {
+        0
+    };
 
     ResidualEffects {
         defender_ability: defender.ability,
+        initial_damage,
+        initial_toxic_counter: defender.toxic_counter,
         healing_or_damage,
         burn_damage,
         poison_damage,
         toxic,
         leech_seed_damage,
+        salt_cure_damage,
+        prevents_healing,
     }
+}
+
+fn initial_hazard_damage(
+    defender: &Pokemon,
+    field: &Field,
+    defender_max_hp: u16,
+    magic_guard: bool,
+) -> u16 {
+    if magic_guard {
+        return 0;
+    }
+    let mut damage = 0u16;
+    if field.defender_side.stealth_rock {
+        let effectiveness = move_effectiveness(
+            "Stealth Rock",
+            PokemonType::Rock,
+            defender.types,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+        );
+        damage = damage
+            .saturating_add(((defender_max_hp as f32 * effectiveness / 8.0).floor() as u16).max(1));
+    }
+    if is_grounded(defender, field) {
+        let spikes = match field.defender_side.spikes.min(3) {
+            1 => (defender_max_hp / 8).max(1),
+            2 => defender_max_hp / 6,
+            3 => defender_max_hp / 4,
+            _ => 0,
+        };
+        damage = damage.saturating_add(spikes);
+    }
+    damage
 }
 
 fn apply_end_of_turn_effects(
@@ -893,7 +1219,7 @@ fn apply_end_of_turn_effects(
         return None;
     }
 
-    if residual.healing_or_damage > 0 {
+    if residual.healing_or_damage > 0 && !residual.prevents_healing {
         state.hp = state
             .hp
             .saturating_add(residual.healing_or_damage as u16)
@@ -911,6 +1237,7 @@ fn apply_end_of_turn_effects(
         residual.poison_damage,
         residual.burn_damage,
         residual.leech_seed_damage,
+        residual.salt_cure_damage,
     ] {
         state.hp = state.hp.saturating_sub(damage);
         if state.hp == 0 {
@@ -932,12 +1259,13 @@ fn apply_end_of_turn_effects(
     Some(state)
 }
 
-fn healing_item_suppressed(move_: &Move, attacker_ability: Ability) -> bool {
-    matches!(attacker_ability, Ability::Unnerve | Ability::AsOne)
+fn healing_item_suppressed(move_: &Move, attacker: &Pokemon) -> bool {
+    matches!(attacker.ability, Ability::Unnerve | Ability::AsOne)
         || matches!(
             move_.name.as_str(),
-            "Knock Off" | "Bug Bite" | "Pluck" | "Incinerate"
+            "Knock Off" | "Psychic Noise" | "Bug Bite" | "Pluck" | "Incinerate"
         )
+        || (attacker.item == Item::None && matches!(move_.name.as_str(), "Thief" | "Covet"))
 }
 
 fn healing_item_recovery(
@@ -1023,9 +1351,6 @@ fn apply_between_hit_effects(
         } else {
             attacker.status = StatusCondition::Burned;
         }
-    }
-    if defender.ability == Ability::SandSpit && field.weather != Weather::Sand {
-        field.weather = Weather::Sand;
     }
 }
 
@@ -1154,6 +1479,7 @@ fn preprocess_battle_state(
     check_trace(defender, attacker, modifiers);
     check_neutralizing_gas(attacker, defender, field, modifiers);
     check_weather_setters(attacker, defender, field, modifiers);
+    check_terrain_setters(attacker, defender, field, modifiers);
     check_screen_cleaner(attacker, defender, field, modifiers);
 
     preprocess_pokemon(attacker, field.weather, field.terrain);
@@ -1174,10 +1500,6 @@ fn preprocess_battle_state(
     check_seeds(defender, field.terrain, modifiers);
     check_sword_shield(attacker, modifiers);
     check_sword_shield(defender, modifiers);
-    check_speed_boost(attacker, modifiers);
-    check_speed_boost(defender, modifiers);
-    check_opportunist(attacker, defender, modifiers);
-    check_opportunist(defender, attacker, modifiers);
     check_wind_rider(attacker, field.attacker_tailwind, modifiers);
     check_wind_rider(defender, field.defender_tailwind, modifiers);
     check_intimidate(attacker, defender, modifiers);
@@ -1262,15 +1584,19 @@ fn cannot_trace(ability: Ability) -> bool {
         ability,
         Ability::AsOne
             | Ability::BattleBond
-            | Ability::EmbodyAspect
+            | Ability::Comatose
+            | Ability::Disguise
             | Ability::FlowerGift
             | Ability::Forecast
-            | Ability::Mimicry
-            | Ability::NeutralizingGas
+            | Ability::Illusion
+            | Ability::Imposter
             | Ability::Protosynthesis
             | Ability::QuarkDrive
+            | Ability::Receiver
+            | Ability::StanceChange
             | Ability::Trace
             | Ability::WonderGuard
+            | Ability::ZeroToHero
     )
 }
 
@@ -1296,7 +1622,15 @@ fn check_neutralizing_gas(
 }
 
 fn cannot_suppress_ability(ability: Ability) -> bool {
-    matches!(ability, Ability::AsOne | Ability::BattleBond)
+    matches!(
+        ability,
+        Ability::AsOne
+            | Ability::BattleBond
+            | Ability::Comatose
+            | Ability::Disguise
+            | Ability::StanceChange
+            | Ability::ZeroToHero
+    )
 }
 
 fn check_klutz(pokemon: &mut Pokemon, modifiers: &mut Vec<ModifierBreakdown>) {
@@ -1329,6 +1663,23 @@ fn check_weather_setters(
             field.weather = weather;
             modifiers.push(ModifierBreakdown::new(label, 0));
         }
+    }
+}
+
+fn check_terrain_setters(
+    attacker: &Pokemon,
+    defender: &Pokemon,
+    field: &mut Field,
+    modifiers: &mut Vec<ModifierBreakdown>,
+) {
+    if field.terrain == crate::types::Terrain::None
+        && matches!(
+            (attacker.ability, defender.ability),
+            (Ability::ElectricSurge, _) | (_, Ability::ElectricSurge)
+        )
+    {
+        field.terrain = crate::types::Terrain::Electric;
+        modifiers.push(ModifierBreakdown::new("Electric Surge", 0));
     }
 }
 
@@ -1401,59 +1752,12 @@ fn check_seeds(
 }
 
 fn check_sword_shield(pokemon: &mut Pokemon, modifiers: &mut Vec<ModifierBreakdown>) {
-    if pokemon.ability == Ability::IntrepidSword && pokemon.ability_on {
+    if pokemon.ability == Ability::IntrepidSword {
         boost_stat(pokemon, Stat::Attack, 1);
         modifiers.push(ModifierBreakdown::new("Intrepid Sword", 0));
-    } else if pokemon.ability == Ability::DauntlessShield && pokemon.ability_on {
+    } else if pokemon.ability == Ability::DauntlessShield {
         boost_stat(pokemon, Stat::Defense, 1);
         modifiers.push(ModifierBreakdown::new("Dauntless Shield", 0));
-    }
-}
-
-fn check_speed_boost(pokemon: &mut Pokemon, modifiers: &mut Vec<ModifierBreakdown>) {
-    if pokemon.ability == Ability::SpeedBoost && pokemon.ability_on {
-        boost_stat(pokemon, Stat::Speed, 1);
-        modifiers.push(ModifierBreakdown::new("Speed Boost", 0));
-    }
-}
-
-fn check_opportunist(
-    source: &mut Pokemon,
-    target: &Pokemon,
-    modifiers: &mut Vec<ModifierBreakdown>,
-) {
-    if source.ability != Ability::Opportunist || !source.ability_on {
-        return;
-    }
-    let mut copied = false;
-    if target.boosts.attack > 0 {
-        source.boosts.attack = source.boosts.attack.max(target.boosts.attack);
-        copied = true;
-    }
-    if target.boosts.defense > 0 {
-        source.boosts.defense = source.boosts.defense.max(target.boosts.defense);
-        copied = true;
-    }
-    if target.boosts.special_attack > 0 {
-        source.boosts.special_attack = source
-            .boosts
-            .special_attack
-            .max(target.boosts.special_attack);
-        copied = true;
-    }
-    if target.boosts.special_defense > 0 {
-        source.boosts.special_defense = source
-            .boosts
-            .special_defense
-            .max(target.boosts.special_defense);
-        copied = true;
-    }
-    if target.boosts.speed > 0 {
-        source.boosts.speed = source.boosts.speed.max(target.boosts.speed);
-        copied = true;
-    }
-    if copied {
-        modifiers.push(ModifierBreakdown::new("Opportunist", 0));
     }
 }
 
@@ -1469,11 +1773,7 @@ fn check_intimidate(
     target: &mut Pokemon,
     modifiers: &mut Vec<ModifierBreakdown>,
 ) {
-    if source.ability != Ability::Intimidate {
-        return;
-    }
-    if target.ability == Ability::FlowerVeil && target.has_type(PokemonType::Grass) {
-        modifiers.push(ModifierBreakdown::new("Flower Veil blocked Intimidate", 0));
+    if source.ability != Ability::Intimidate || !source.ability_on {
         return;
     }
     if matches!(target.ability, Ability::Contrary | Ability::GuardDog) {
@@ -1534,7 +1834,7 @@ fn check_supersweet_syrup(
         if target.ability == Ability::Defiant {
             boost_stat(target, Stat::Attack, 2);
         } else if target.ability == Ability::Competitive {
-            boost_stat(target, Stat::SpecialAttack, 2);
+            target.boosts.attack = (target.boosts.special_attack + 2).min(6);
         }
         modifiers.push(ModifierBreakdown::new("Supersweet Syrup", 0));
     }
@@ -1578,12 +1878,7 @@ fn check_embody_aspect(pokemon: &mut Pokemon, modifiers: &mut Vec<ModifierBreakd
 }
 
 fn check_battle_bond(pokemon: &mut Pokemon, modifiers: &mut Vec<ModifierBreakdown>) {
-    if pokemon.ability == Ability::BattleBond && pokemon.ability_on {
-        boost_stat(pokemon, Stat::Attack, 1);
-        boost_stat(pokemon, Stat::SpecialAttack, 1);
-        boost_stat(pokemon, Stat::Speed, 1);
-        modifiers.push(ModifierBreakdown::new("Battle Bond", 0));
-    }
+    let _ = (pokemon, modifiers);
 }
 
 fn boost_stat(pokemon: &mut Pokemon, stat: Stat, stages: i8) {
@@ -1633,6 +1928,9 @@ fn preprocess_pokemon(pokemon: &mut Pokemon, weather: Weather, terrain: crate::t
 
 fn apply_move_type_changes(move_: &mut Move, attacker: &Pokemon, field: &Field) {
     match move_.name.as_str() {
+        "Struggle" => {
+            move_.type_ = PokemonType::Typeless;
+        }
         "Weather Ball" => {
             move_.type_ = if (field.weather.is_sun() && attacker.item != Item::UtilityUmbrella)
                 || attacker.ability == Ability::MegaSol
@@ -1733,10 +2031,17 @@ fn apply_priority_defaults(
     attacker: &Pokemon,
     attacker_current_hp: u16,
     attacker_max_hp: u16,
+    field: &Field,
 ) {
     if attacker.ability == Ability::GaleWings
         && move_.type_ == PokemonType::Flying
         && attacker_current_hp == attacker_max_hp
+    {
+        move_.is_priority = true;
+    }
+    if move_.name == "Grassy Glide"
+        && field.terrain == crate::types::Terrain::Grassy
+        && is_grounded(attacker, field)
     {
         move_.is_priority = true;
     }
@@ -1998,6 +2303,9 @@ fn zero_damage(
         percent_range: (0.0, 0.0),
         ko_chance_by_move_use: vec![0.0; KO_CHANCE_MAX_USES],
         ko_chance: Some(0.0),
+        outcome: DamageOutcome::ImmuneOrFailed,
+        resolved_move: None,
+        defender_hp_delta: None,
         applied_modifiers: modifiers,
         debug,
     }
@@ -2020,8 +2328,13 @@ fn set_damage_result(
         defender_max_hp,
         defender_current_hp,
         defender_item: defender.item,
-        residual: residual_effects(defender, field, defender_max_hp),
-        healing_suppressed: healing_item_suppressed(move_, attacker.ability),
+        residual: residual_effects(
+            defender,
+            field,
+            defender_max_hp,
+            move_.name == "Psychic Noise",
+        ),
+        healing_suppressed: healing_item_suppressed(move_, attacker),
     };
 
     if let Some(result) = counter_damage_result(move_, context, modifiers.clone(), debug.clone()) {
@@ -2108,6 +2421,9 @@ fn counter_damage_result(
         percent_range,
         ko_chance_by_move_use,
         ko_chance,
+        outcome: DamageOutcome::Counter,
+        resolved_move: None,
+        defender_hp_delta: None,
         applied_modifiers: modifiers,
         debug,
     })
@@ -2139,9 +2455,57 @@ fn single_damage_result(
         percent_range: (percent, percent),
         ko_chance_by_move_use,
         ko_chance,
+        outcome: DamageOutcome::Damage,
+        resolved_move: None,
+        defender_hp_delta: None,
         applied_modifiers: modifiers,
         debug,
     }
+}
+
+fn resolved_move(move_: &Move, base_power: u16, is_critical: bool) -> ResolvedMove {
+    ResolvedMove {
+        name: move_.name.clone(),
+        type_: move_.type_,
+        category: move_.category,
+        base_power,
+        hits: move_.hits.max(1),
+        is_critical,
+        is_spread: move_.is_spread,
+        makes_contact: move_.makes_contact,
+        is_priority: move_.is_priority,
+    }
+}
+
+fn can_tera_boost_to_sixty(move_: &Move, attacker: &Pokemon) -> bool {
+    let tera_type_matches = attacker.tera_type.is_some_and(|tera_type| {
+        move_.type_ == tera_type || (tera_type == PokemonType::Stellar && move_.gets_stellar_boost)
+    });
+    if !attacker.is_terastalized
+        || !tera_type_matches
+        || move_.is_priority
+        || move_.is_multi_hit
+        || move_.hits > 1
+    {
+        return false;
+    }
+    !matches!(
+        move_.name.as_str(),
+        "Crush Grip"
+            | "Dragon Energy"
+            | "Electro Ball"
+            | "Eruption"
+            | "Flail"
+            | "Fling"
+            | "Grass Knot"
+            | "Gyro Ball"
+            | "Heat Crash"
+            | "Heavy Slam"
+            | "Low Kick"
+            | "Reversal"
+            | "Water Spout"
+            | "Hard Press"
+    )
 }
 
 fn calc_defense_mods(
