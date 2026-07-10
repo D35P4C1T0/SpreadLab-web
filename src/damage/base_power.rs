@@ -26,11 +26,7 @@ pub(super) fn calc_base_power(
             bp
         }
         "Electro Ball" => {
-            let ratio = if defender_speed == 0 {
-                0
-            } else {
-                attacker_speed / defender_speed
-            };
+            let ratio = attacker_speed.checked_div(defender_speed).unwrap_or(0);
             let bp = if ratio >= 4 {
                 150
             } else if ratio >= 3 {
