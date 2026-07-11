@@ -115,6 +115,33 @@ let restoredState = null;
 let builtInSets = [];
 let savedSets = [];
 
+const setdexStatLabels = Object.freeze({ hp: "HP", at: "Atk", df: "Def", sa: "SpA", sd: "SpD", sp: "Spe" });
+
+function setdexPresetText(pokemon, set) {
+  const item = set.item && normalizeName(set.item) !== "none" ? ` @ ${set.item}` : "";
+  const lines = [`${pokemon}${item}`];
+  if (set.ability) lines.push(`Ability: ${set.ability}`);
+  const points = Object.entries(set.sps || {})
+    .filter(([key, value]) => setdexStatLabels[key] && Number(value) > 0)
+    .map(([key, value]) => `${Number(value)} ${setdexStatLabels[key]}`);
+  lines.push(`SPs: ${points.length ? points.join(" / ") : "0 HP"}`);
+  if (set.nature) lines.push(`${set.nature} Nature`);
+  for (const move of set.moves || []) if (move) lines.push(`- ${move}`);
+  return lines.join("\n");
+}
+
+function loadSetdexPresets() {
+  if (typeof SETDEX_GEN10 !== "object" || !SETDEX_GEN10) return [];
+  return Object.entries(SETDEX_GEN10).flatMap(([pokemon, sets]) =>
+    Object.entries(sets).map(([setName, set]) => ({
+      id: `gen10:${normalizeName(pokemon)}:${normalizeName(setName)}`,
+      name: setName,
+      pokemon,
+      text: setdexPresetText(pokemon, set),
+    })),
+  );
+}
+
 function parseSet(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const [rawName = "Unknown", rawItem = "None"] = (lines[0] || "Unknown").split("@").map((part) => part.trim());
@@ -557,13 +584,16 @@ function initRawEditors() {
 }
 
 function initSetLibraries() {
-  builtInSets = [...document.querySelectorAll("[data-set-card] .raw-editor")]
+  const initialSets = [...document.querySelectorAll("[data-set-card] .raw-editor")]
     .map((editor) => {
       const text = editor.defaultValue.trim();
       const pokemon = parseSet(text).name;
       return { id: `builtin:${normalizeName(pokemon)}`, name: `${pokemon} · Common`, pokemon, text };
     })
     .filter((entry, index, all) => entry.pokemon && all.findIndex((candidate) => candidate.id === entry.id) === index);
+  builtInSets = [...loadSetdexPresets(), ...initialSets].filter(
+    (entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index,
+  );
   savedSets = loadSavedSets();
 
   document.querySelectorAll("[data-set-card]").forEach((card) => {
@@ -788,9 +818,9 @@ function initPokemonSelectors() {
         setActivePokemonOption(options, Math.max(activeIndex - 1, 0));
       } else if (event.key === "Enter") {
         event.preventDefault();
-        const best = active?.dataset.pokemonName || options[0]?.dataset.pokemonName;
+        const best = active || options[0];
         if (best) {
-          applyPokemonSelection(cardKey, best);
+          applyPokemonSelection(cardKey, best.dataset.pokemonName, best.dataset.setId);
           closePokemonMenu(choice, menu);
         }
       } else if (event.key === "Escape") {
@@ -801,7 +831,7 @@ function initPokemonSelectors() {
       const option = event.target.closest("[data-pokemon-option]");
       if (!option) return;
       event.preventDefault();
-      applyPokemonSelection(cardKey, option.dataset.pokemonName);
+      applyPokemonSelection(cardKey, option.dataset.pokemonName, option.dataset.setId);
       closePokemonMenu(choice, menu);
     });
     document.addEventListener("mousedown", (event) => {
@@ -865,11 +895,11 @@ function initItemSelectors() {
 function renderPokemonOptions(input, optionsNode, showAll = false) {
   if (!input || !optionsNode) return;
   const matches = fuzzyPokemonMatches(showAll ? "" : input.value, 24);
-  const renderKey = `pokemon:${matches.map(({ name }) => name).join("\u0000")}`;
+  const renderKey = `pokemon:${matches.map(({ name, setId }) => `${name}:${setId || ""}`).join("\u0000")}`;
   if (optionsNode.dataset.renderKey === renderKey) return;
   optionsNode.dataset.renderKey = renderKey;
   optionsNode.innerHTML = matches.length
-    ? matches.map(({ name }, index) => `<button class="pokemon-option ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join("")
+    ? matches.map(({ name, pokemon, setName, setId }, index) => `<button class="pokemon-option ${setName ? "set-option" : "species-option"} ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(pokemon || name)}"${setId ? ` data-set-id="${escapeAttr(setId)}"` : ""}>${setName ? `<span>${escapeHtml(setName)}</span>` : `<b>${escapeHtml(name)}</b>`}</button>`).join("")
     : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
 }
 
@@ -910,7 +940,19 @@ function setActivePokemonOption(options, index) {
 }
 
 function fuzzyPokemonMatches(query, limit) {
-  return fuzzyMatches(pokemonSearchList, query, limit);
+  const entries = pokemonSearchList.flatMap(({ name, key }) => {
+    const sets = setsForPokemon(name).builtIn.map((set) => ({
+      name: `${name} (${set.name})`,
+      pokemon: name,
+      setName: set.name,
+      setId: set.id,
+      key: normalizeName(`${name} ${set.name}`),
+    }));
+    return [{ name, pokemon: name, key }, ...sets, {
+      name: `${name} (Blank Set)`, pokemon: name, setName: "Blank Set", setId: "blank", key: `${key}blankset`,
+    }];
+  });
+  return fuzzyMatches(entries, query, limit);
 }
 
 function fuzzyItemMatches(query, limit) {
@@ -919,8 +961,8 @@ function fuzzyItemMatches(query, limit) {
 
 function fuzzyMatches(entries, query, limit) {
   const normalizedQuery = normalizeName(query);
-  if (!normalizedQuery) return entries.slice(0, limit).map(({ name }) => ({ name, score: 0 }));
-  const scored = entries.map(({ name, key }) => ({ name, score: fuzzyScore(normalizedQuery, key) }))
+  if (!normalizedQuery) return entries.slice(0, limit).map((entry) => ({ ...entry, score: 0 }));
+  const scored = entries.map((entry) => ({ ...entry, score: fuzzyScore(normalizedQuery, entry.key) }))
     .filter((entry) => entry.score !== null)
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
   return scored.slice(0, limit);
@@ -942,7 +984,7 @@ function fuzzyScore(query, candidate) {
   return score + candidate.length;
 }
 
-function applyPokemonSelection(cardKey, rawName) {
+function applyPokemonSelection(cardKey, rawName, setId = "") {
   const card = document.querySelector(`[data-set-card="${cardKey}"]`);
   const editor = card?.querySelector(".raw-editor");
   if (!card || !editor) return;
@@ -954,6 +996,30 @@ function applyPokemonSelection(cardKey, rawName) {
   const choice = card.querySelector("[data-pokemon-choice]");
   if (selector) selector.value = selected;
   if (choice) choice.replaceChildren(document.createTextNode(selected));
+  if (setId && setId !== "blank") {
+    const preset = builtInSets.find((entry) => entry.id === setId);
+    if (preset) {
+      editor.value = preset.text;
+      delete card.dataset.activeSavedSet;
+      syncRawEditor(editor);
+      const label = `${selected} (${preset.name})`;
+      if (selector) selector.value = label;
+      if (choice) choice.replaceChildren(document.createTextNode(label));
+      refreshSetLibrary(card);
+      saveState();
+      autoRun();
+      return;
+    }
+  }
+  if (setId === "blank") {
+    editor.value = buildBlankPokemonSet(card, selected);
+    delete card.dataset.activeSavedSet;
+    syncRawEditor(editor);
+    refreshSetLibrary(card);
+    saveState();
+    autoRun();
+    return;
+  }
   if (normalizeName(previous) === normalizeName(selected)) return;
 
   resetCardTraining(card);

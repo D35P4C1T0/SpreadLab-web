@@ -138,8 +138,9 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260710-9"/>
-        <script defer src="/assets/app.js?v=20260710-9"></script>
+        <link rel="stylesheet" href="/assets/app.css?v=20260711-1"/>
+        <script src="/assets/setdex_ncp-g10.js?v=20260711-1"></script>
+        <script defer src="/assets/app.js?v=20260711-1"></script>
             </head>
             <body inner_html=body></body>
         </html>

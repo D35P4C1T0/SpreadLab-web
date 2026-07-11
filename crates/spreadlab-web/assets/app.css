@@ -133,6 +133,9 @@ small { display: block; color: var(--muted); font-size: 11px; }
 .pokemon-option { width: 100%; min-height: 28px; padding: 0 7px; border: 0; border-radius: 3px; background: transparent; color: var(--text); text-align: left; font-size: 12px; }
 .pokemon-option:hover, .pokemon-option.is-active { background: rgb(40 214 202 / 20%); color: var(--cyan); }
 .pokemon-option.empty { display: grid; align-items: center; color: var(--dim); }
+.pokemon-option.species-option { color: var(--text); }
+.pokemon-option.set-option { padding-left: 19px; color: var(--muted); }
+.pokemon-option.set-option span::before { content: "\2014  "; color: var(--dim); }
 
 .set-library { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 5px; padding: 0; }
 .set-library label { min-width: 0; }
