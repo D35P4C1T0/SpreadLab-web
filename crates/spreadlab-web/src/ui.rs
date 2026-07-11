@@ -138,9 +138,9 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260711-4"/>
-        <script src="/assets/setdex_ncp-g10.js?v=20260711-4"></script>
-        <script defer src="/assets/app.js?v=20260711-4"></script>
+        <link rel="stylesheet" href="/assets/app.css?v=20260711-5"/>
+        <script src="/assets/setdex_ncp-g10.js?v=20260711-5"></script>
+        <script defer src="/assets/app.js?v=20260711-5"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -277,7 +277,6 @@ fn pokemon_sets(mode: Mode) -> String {
 
 fn set_library_controls() -> &'static str {
     r#"<div class="set-library">
-  <label>Set<select data-set-library aria-label="Set preset"></select></label>
   <button type="button" data-save-set>Save set</button>
   <button type="button" data-delete-set disabled>Delete</button>
   <div class="save-set-row" data-save-set-row hidden>

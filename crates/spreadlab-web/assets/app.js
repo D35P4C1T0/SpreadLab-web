@@ -679,7 +679,6 @@ function initSetLibraries() {
 
   document.querySelectorAll("[data-set-card]").forEach((card) => {
     refreshSetLibrary(card);
-    card.querySelector("[data-set-library]")?.addEventListener("change", (event) => applySetLibrarySelection(card, event.target.value));
     card.querySelector("[data-save-set]")?.addEventListener("click", () => openSaveSetRow(card));
     card.querySelector("[data-cancel-save]")?.addEventListener("click", () => closeSaveSetRow(card));
     card.querySelector("[data-confirm-save]")?.addEventListener("click", () => saveCurrentSet(card));
@@ -734,11 +733,15 @@ function indexSetsByPokemon(sets) {
 
 function rebuildPokemonOptionSearchList() {
   pokemonOptionSearchList = pokemonSearchList.flatMap(({ name, key }) => {
-    const sets = (builtInSetsByPokemon.get(key) || []).map((set) => ({
+    const builtIns = (builtInSetsByPokemon.get(key) || []).map((set) => ({
       name: `${name} (${set.name})`, pokemon: name, setName: set.name, setId: set.id,
       key: normalizeName(`${name} ${set.name}`),
     }));
-    return [{ name, pokemon: name, key }, ...sets, {
+    const saved = (savedSetsByPokemon.get(key) || []).map((set) => ({
+      name: `${name} (${set.name})`, pokemon: name, setName: `★ ${set.name}`, setId: set.id,
+      key: normalizeName(`${name} ${set.name}`), saved: true,
+    }));
+    return [{ name, pokemon: name, key }, ...builtIns, ...saved, {
       name: `${name} (Blank Set)`, pokemon: name, setName: "Blank Set", setId: "blank", key: `${key}blankset`,
     }];
   });
@@ -746,39 +749,12 @@ function rebuildPokemonOptionSearchList() {
 }
 
 function refreshSetLibrary(card) {
-  const select = card.querySelector("[data-set-library]");
-  const editor = card.querySelector(".raw-editor");
-  if (!select || !editor) return;
-  const pokemon = parseSet(editor.value).name;
-  const available = setsForPokemon(pokemon);
-  const activeId = card.dataset.activeSavedSet || "";
-  const matchingBuiltIn = available.builtIn.find((entry) => normalizedSetText(entry.text) === normalizedSetText(editor.value));
-  const matchingSaved = available.saved.find((entry) => entry.id === activeId && normalizedSetText(entry.text) === normalizedSetText(editor.value));
-  const selected = matchingSaved?.id || matchingBuiltIn?.id || "current";
-  select.innerHTML = [
-    `<option value="current">Current set</option>`,
-    ...available.builtIn.map((entry) => `<option value="${escapeAttr(entry.id)}">${escapeHtml(entry.name)}</option>`),
-    ...available.saved.map((entry) => `<option value="${escapeAttr(entry.id)}">★ ${escapeHtml(entry.name)}</option>`),
-    `<option value="blank">Blank set</option>`,
-  ].join("");
-  select.value = selected;
-  const deleteButton = card.querySelector("[data-delete-set]");
-  if (deleteButton) deleteButton.disabled = !matchingSaved;
-}
-
-function applySetLibrarySelection(card, id) {
-  if (id === "current") return;
   const editor = card.querySelector(".raw-editor");
   if (!editor) return;
-  const pokemon = parseSet(editor.value).name;
-  const entry = [...builtInSets, ...savedSets].find((candidate) => candidate.id === id);
-  editor.value = id === "blank" ? buildBlankPokemonSet(card, pokemon) : setToMegaFormFromItem(entry?.text || editor.value);
-  if (entry && id.startsWith("saved:")) card.dataset.activeSavedSet = id;
-  else delete card.dataset.activeSavedSet;
-  syncRawEditor(editor);
-  refreshSetLibrary(card);
-  saveState();
-  autoRun();
+  const activeId = card.dataset.activeSavedSet || "";
+  const matchingSaved = savedSets.find((entry) => entry.id === activeId && normalizedSetText(entry.text) === normalizedSetText(editor.value));
+  const deleteButton = card.querySelector("[data-delete-set]");
+  if (deleteButton) deleteButton.disabled = !matchingSaved;
 }
 
 function openSaveSetRow(card) {
@@ -1039,7 +1015,7 @@ function renderPokemonOptions(input, optionsNode, showAll = false) {
   if (optionsNode.dataset.renderKey === renderKey) return;
   optionsNode.dataset.renderKey = renderKey;
   optionsNode.innerHTML = matches.length
-    ? matches.map(({ name, pokemon, setName, setId }, index) => `<button class="pokemon-option ${setName ? "set-option" : "species-option"} ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(pokemon || name)}"${setId ? ` data-set-id="${escapeAttr(setId)}"` : ""}>${setName ? `<span>${escapeHtml(setName)}</span>` : `<b>${escapeHtml(name)}</b>`}</button>`).join("")
+    ? matches.map(({ name, pokemon, setName, setId, saved }, index) => `<button class="pokemon-option ${setName ? "set-option" : "species-option"} ${saved ? "saved-option" : ""} ${index === 0 ? "is-active" : ""}" type="button" role="option" data-pokemon-option data-pokemon-name="${escapeAttr(pokemon || name)}"${setId ? ` data-set-id="${escapeAttr(setId)}"` : ""}>${setName ? `<span>${escapeHtml(setName)}</span>` : `<b>${escapeHtml(name)}</b>`}</button>`).join("")
     : `<div class="pokemon-option empty" role="option" aria-disabled="true">No match</div>`;
 }
 
@@ -1126,12 +1102,13 @@ function applyPokemonSelection(cardKey, rawName, setId = "") {
   if (selector) selector.value = selectedBase;
   if (choice) choice.replaceChildren(document.createTextNode(selectedBase));
   if (setId && setId !== "blank") {
-    const preset = builtInSets.find((entry) => entry.id === setId);
+    const preset = [...builtInSets, ...savedSets].find((entry) => entry.id === setId);
     if (preset) {
-      editor.value = preset.text;
-      delete card.dataset.activeSavedSet;
+      editor.value = setToMegaFormFromItem(preset.text);
+      if (setId.startsWith("saved:")) card.dataset.activeSavedSet = setId;
+      else delete card.dataset.activeSavedSet;
       syncRawEditor(editor);
-      const label = `${selectedBase} (${preset.name})`;
+      const label = `${selectedBase} (${setId.startsWith("saved:") ? "★ " : ""}${preset.name})`;
       if (selector) selector.value = label;
       if (choice) choice.replaceChildren(document.createTextNode(label));
       refreshSetLibrary(card);

@@ -139,12 +139,12 @@ small { display: block; color: var(--muted); font-size: 11px; }
 .pokemon-option.species-option { color: var(--text); }
 .pokemon-option.set-option { padding-left: 19px; color: var(--muted); }
 .pokemon-option.set-option span::before { content: "\2014  "; color: var(--dim); }
+.pokemon-option.saved-option { color: #ffd66b; }
 
-.set-library { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 5px; padding: 0; }
-.set-library label { min-width: 0; }
-.set-library select, .save-set-row input { height: 30px; }
+.set-library { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; padding: 0; }
+.save-set-row input { height: 30px; }
 .set-library button:disabled { opacity: .38; cursor: not-allowed; }
-.save-set-row { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
+.save-set-row { flex: 1 1 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
 .save-set-row[hidden] { display: none; }
 
 .swap-action { height: 30px; display: flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid #3b5369; border-radius: 5px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 800; }
