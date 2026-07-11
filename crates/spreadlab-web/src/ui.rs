@@ -83,7 +83,7 @@ fn early_restore_script() -> &'static str {
     const types = card.querySelector('[data-field="types"]');
     const savedTypes = key === "attacker" ? window.__spreadlabEarlyState?.attackerTypes : window.__spreadlabEarlyState?.defenderTypes;
     if (types && Array.isArray(savedTypes) && savedTypes.length) {
-      types.innerHTML = savedTypes.map((type) => `<span class="${typeClass(type)}">${escapeHtml(type)}</span>`).join("");
+      types.innerHTML = savedTypes.map((type) => `<span class="pokemon-type-icon" data-type="${escapeHtml(type)}" title="${escapeHtml(type)}" aria-label="${escapeHtml(type)} type"><img src="/assets/type-icons/${String(type).toLowerCase()}.svg" alt="" aria-hidden="true"/><span class="sr-only">${escapeHtml(type)}</span></span>`).join("");
     } else if (types) {
       types.innerHTML = '<span class="type type-unknown">...</span>';
     }
@@ -138,9 +138,9 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260711-5"/>
+        <link rel="stylesheet" href="/assets/app.css?v=20260711-10"/>
         <script src="/assets/setdex_ncp-g10.js?v=20260711-5"></script>
-        <script defer src="/assets/app.js?v=20260711-5"></script>
+        <script defer src="/assets/app.js?v=20260711-6"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -204,7 +204,7 @@ fn pokemon_sets(mode: Mode) -> String {
         <div class="sprite"><img data-sprite-name="Kingambit" src="/api/sprite/Kingambit" alt="Kingambit sprite"/></div>
         <div>
           <h2 data-field="name">Kingambit <em>♂</em></h2>
-          <div data-field="types"><span class="type type-dark">Dark</span><span class="type type-steel">Steel</span></div>
+          <div data-field="types"><span class="pokemon-type-icon" title="Dark" aria-label="Dark type"><img src="/assets/type-icons/dark.svg" alt="" aria-hidden="true"/><span class="sr-only">Dark</span></span><span class="pokemon-type-icon" title="Steel" aria-label="Steel type"><img src="/assets/type-icons/steel.svg" alt="" aria-hidden="true"/><span class="sr-only">Steel</span></span></div>
           <p>Ability: <span data-field="ability">Defiant</span></p><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Black Glasses" src="/api/item-sprite/Black%20Glasses" alt="Black Glasses"/><span data-field="item" class="sr-only">Black Glasses</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="attacker"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Attacker Item"><span class="select2-chosen" data-item-choice="attacker">Black Glasses</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="attacker"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="attacker" value="Black Glasses" autocomplete="off" role="combobox" aria-label="Search Attacker Item"/></span><span class="pokemon-options" data-item-options="attacker" role="listbox"></span></span></span></p>
         </div>
       </div>
@@ -230,7 +230,7 @@ fn pokemon_sets(mode: Mode) -> String {
         <div class="sprite"><img data-sprite-name="Floette-Mega" src="/api/sprite/Floette-Mega" alt="Floette-Mega sprite"/></div>
         <div>
           <h2 data-field="name">Floette-Mega <em>♀</em></h2>
-          <div data-field="types"><span class="type type-fairy">Fairy</span></div>
+          <div data-field="types"><span class="pokemon-type-icon" title="Fairy" aria-label="Fairy type"><img src="/assets/type-icons/fairy.svg" alt="" aria-hidden="true"/><span class="sr-only">Fairy</span></span></div>
           <p>Ability: <span data-field="ability">Fairy Aura</span></p><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Floettite" src="/api/item-sprite/Floettite" alt="Floettite"/><span data-field="item" class="sr-only">Floettite</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="defender"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Defender Item"><span class="select2-chosen" data-item-choice="defender">Floettite</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="defender"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="defender" value="Floettite" autocomplete="off" role="combobox" aria-label="Search Defender Item"/></span><span class="pokemon-options" data-item-options="defender" role="listbox"></span></span></span></p>
         </div>
       </div>

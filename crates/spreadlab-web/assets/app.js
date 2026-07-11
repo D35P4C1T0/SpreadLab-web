@@ -302,9 +302,11 @@ function renderCard(card, parsed) {
     const selectedMove = card.dataset.setCard === "attacker" && moveInput?.value
       ? moveInput.value
       : parsed.moves[0];
-    moves.innerHTML = parsed.moves.map((move) =>
-      `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button">${escapeHtml(move)} <span class="${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`
-    ).join("");
+    moves.innerHTML = parsed.moves.map((move) => {
+      const type = moveType(move);
+      const icon = type === "Unknown" ? "" : `<img src="/assets/type-icons/${escapeAttr(type.toLowerCase())}.svg" alt="" aria-hidden="true"/>`;
+      return `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button"><span class="move-name">${escapeHtml(move)}</span><span class="move-type-badge ${typeClass(type)}" aria-label="${escapeAttr(type)} type">${icon}<span class="move-type-name">${escapeHtml(type)}</span></span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`;
+    }).join("");
     if (card.dataset.setCard === "attacker") setSelectedMove(selectedMove);
     }
   }
@@ -471,7 +473,13 @@ function renderTypes(card, name) {
     target.innerHTML = `<span class="type type-unknown">Unknown</span>`;
     return;
   }
-  target.innerHTML = types.map((type) => `<span class="type ${typeClass(type)}">${escapeHtml(type)}</span>`).join("");
+  target.innerHTML = types.map((type) => pokemonTypeIcon(type)).join("");
+}
+
+function pokemonTypeIcon(type) {
+  const safeType = String(type || "Unknown");
+  const icon = safeType === "Unknown" ? "" : `<img src="/assets/type-icons/${escapeAttr(safeType.toLowerCase())}.svg" alt="" aria-hidden="true"/>`;
+  return `<span class="pokemon-type-icon" data-type="${escapeAttr(safeType)}" title="${escapeAttr(safeType)}" aria-label="${escapeAttr(safeType)} type">${icon}<span class="sr-only">${escapeHtml(safeType)}</span></span>`;
 }
 
 function moveType(move) {

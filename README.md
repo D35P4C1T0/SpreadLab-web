@@ -23,6 +23,11 @@ The app is an Axum server with server-rendered Rust UI and a small client-side s
 The preset data in `crates/spreadlab-web/assets/setdex_ncp-g10.js` is distributed
 under its upstream MIT license in `crates/spreadlab-web/assets/SETDEX_LICENSE`.
 
+Pokémon type SVGs are from
+[`partywhale/pokemon-type-icons`](https://github.com/partywhale/pokemon-type-icons)
+by James Watkins and are used under the MIT license. The retained license is in
+`crates/spreadlab-web/assets/type-icons/LICENSE`.
+
 ## Run
 
 From the repository root:
@@ -36,6 +41,17 @@ Then open:
 ```text
 http://127.0.0.1:3000/survive
 ```
+
+Debug builds inject live-reload support automatically. Changes to `app.css`,
+`app.js`, or the vendored setdex reload connected browsers without restarting
+the server. For Rust source changes, run through `cargo-watch` so the server is
+rebuilt; the browser reconnects and reloads after restart:
+
+```sh
+cargo watch -x 'run -p spreadlab-web -- serve --host 127.0.0.1 --port 3000'
+```
+
+Release builds do not include or run live-reload middleware.
 
 ## Docker
 

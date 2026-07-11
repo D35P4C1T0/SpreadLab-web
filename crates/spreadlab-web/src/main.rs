@@ -20,6 +20,8 @@ use std::{
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tower_http::{services::ServeDir, trace::TraceLayer};
+#[cfg(debug_assertions)]
+use tower_livereload::{LiveReloadLayer, Reloader};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug, Parser)]
@@ -271,11 +273,54 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
+    #[cfg(debug_assertions)]
+    let app = {
+        let live_reload = LiveReloadLayer::new();
+        watch_dev_assets(live_reload.reloader());
+        tracing::info!("development live reload enabled");
+        app.layer(live_reload)
+    };
+
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("serving SpreadLab WebUI at http://{addr}");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn watch_dev_assets(reloader: Reloader) {
+    const WATCHED_ASSETS: &[&str] = &[
+        "crates/spreadlab-web/assets/app.css",
+        "crates/spreadlab-web/assets/app.js",
+        "crates/spreadlab-web/assets/setdex_ncp-g10.js",
+    ];
+    tokio::spawn(async move {
+        let mut previous = dev_asset_versions(WATCHED_ASSETS).await;
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(350));
+        loop {
+            interval.tick().await;
+            let current = dev_asset_versions(WATCHED_ASSETS).await;
+            if current != previous {
+                previous = current;
+                reloader.reload();
+            }
+        }
+    });
+}
+
+#[cfg(debug_assertions)]
+async fn dev_asset_versions(paths: &[&str]) -> Vec<Option<(std::time::SystemTime, u64)>> {
+    let mut versions = Vec::with_capacity(paths.len());
+    for path in paths {
+        versions.push(
+            tokio::fs::metadata(path)
+                .await
+                .ok()
+                .and_then(|metadata| Some((metadata.modified().ok()?, metadata.len()))),
+        );
+    }
+    versions
 }
 
 async fn api_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebError> {

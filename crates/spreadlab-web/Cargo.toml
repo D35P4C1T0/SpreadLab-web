@@ -23,5 +23,6 @@ spreadlab-rs = { git = "https://github.com/D35P4C1T0/SpreadLab.git", rev = "f0f7
 thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
 tower-http = { version = "0.5", features = ["fs", "trace"] }
+tower-livereload = "0.10.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
