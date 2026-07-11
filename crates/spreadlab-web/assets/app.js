@@ -28,9 +28,12 @@ let moveTypes = {
 let speciesTypes = {};
 let speciesAbilities = {};
 let pokemonList = [];
+let speciesList = [];
+let speciesForms = new Map();
 let itemList = [];
 let moveList = [];
 let pokemonSearchList = [];
+let pokemonOptionSearchList = [];
 let itemSearchList = [];
 const megaStonePokemon = Object.freeze({
   Abomasite: "Mega Abomasnow",
@@ -114,6 +117,8 @@ const savedSetsKey = "spreadlab.webui.savedSets.v1";
 let restoredState = null;
 let builtInSets = [];
 let savedSets = [];
+let builtInSetsByPokemon = new Map();
+let savedSetsByPokemon = new Map();
 
 const setdexStatLabels = Object.freeze({ hp: "HP", at: "Atk", df: "Def", sa: "SpA", sd: "SpD", sp: "Spe" });
 
@@ -127,18 +132,34 @@ function setdexPresetText(pokemon, set) {
   lines.push(`SPs: ${points.length ? points.join(" / ") : "0 HP"}`);
   if (set.nature) lines.push(`${set.nature} Nature`);
   for (const move of set.moves || []) if (move) lines.push(`- ${move}`);
-  return lines.join("\n");
+  return setToMegaFormFromItem(lines.join("\n"));
+}
+
+function setToMegaFormFromItem(text) {
+  const parsed = parseSet(text);
+  const mappedMega = megaStonePokemon[parsed.item];
+  if (!mappedMega) return text;
+  const megaSpecies = canonicalSpeciesName(mappedMega);
+  if (!speciesList.includes(megaSpecies)) return text;
+  const base = baseSpeciesName(canonicalSpeciesName(parsed.name));
+  if (normalizeName(baseSpeciesName(megaSpecies)) !== normalizeName(base)) return text;
+  let updated = setFirstLineSpecies(text, megaSpecies);
+  updated = replaceOrInsertLine(updated, /^Ability:/i, `Ability: ${primaryAbility(megaSpecies) || parsed.ability || "None"}`);
+  return updated;
 }
 
 function loadSetdexPresets() {
   if (typeof SETDEX_GEN10 !== "object" || !SETDEX_GEN10) return [];
   return Object.entries(SETDEX_GEN10).flatMap(([pokemon, sets]) =>
-    Object.entries(sets).map(([setName, set]) => ({
-      id: `gen10:${normalizeName(pokemon)}:${normalizeName(setName)}`,
-      name: setName,
-      pokemon,
-      text: setdexPresetText(pokemon, set),
-    })),
+    Object.entries(sets).map(([setName, set]) => {
+      const canonical = canonicalSpeciesName(pokemon);
+      return {
+        id: `gen10:${normalizeName(pokemon)}:${normalizeName(setName)}`,
+        name: setName,
+        pokemon: canonical,
+        text: setdexPresetText(canonical, set),
+      };
+    }),
   );
 }
 
@@ -235,7 +256,9 @@ function renderCard(card, parsed) {
   const selector = card.querySelector("[data-pokemon-selector]");
   if (selector && document.activeElement !== selector) selector.value = parsed.name;
   const choice = card.querySelector("[data-pokemon-choice]");
-  if (choice) choice.replaceChildren(document.createTextNode(parsed.name));
+  const baseName = baseSpeciesName(parsed.name);
+  if (choice) choice.replaceChildren(document.createTextNode(baseName));
+  syncFormSelector(card, parsed.name);
   const itemSelector = card.querySelector("[data-item-selector]");
   if (itemSelector && document.activeElement !== itemSelector) itemSelector.value = parsed.item;
   const itemChoice = card.querySelector("[data-item-choice]");
@@ -365,8 +388,65 @@ function renderMoveSelector() {
 }
 
 function setPokemonList(data) {
-  pokemonList = sortedUniqueNames(data);
+  speciesList = sortedUniqueNames(data);
+  const canonicalKeys = new Set(speciesList.map(normalizeName));
+  speciesForms = new Map();
+  for (const species of speciesList) {
+    const base = baseSpeciesName(species, canonicalKeys);
+    if (!speciesForms.has(base)) speciesForms.set(base, []);
+    speciesForms.get(base).push(species);
+  }
+  pokemonList = [...speciesForms.keys()].sort((a, b) => a.localeCompare(b));
   pokemonSearchList = pokemonList.map((name) => ({ name, key: normalizeName(name) }));
+  rebuildPokemonOptionSearchList();
+}
+
+function baseSpeciesName(species, canonicalKeys = new Set(speciesList.map(normalizeName))) {
+  if (species.startsWith("Mega ")) {
+    let base = species.slice(5).replace(/ [XYZ]$/, "");
+    if (canonicalKeys.has(normalizeName(base))) return base;
+    return base;
+  }
+  const parenthetical = species.match(/^(.+?) \(.+\)$/);
+  return parenthetical ? parenthetical[1] : species;
+}
+
+function defaultSpeciesForBase(base) {
+  const forms = speciesForms.get(base) || [];
+  const exact = forms.find((name) => normalizeName(name) === normalizeName(base));
+  if (exact) return exact;
+  const defaults = {
+    Aegislash: "Aegislash (Shield Forme)", Alcremie: "Alcremie (Vanilla Cream)", Basculegion: "Basculegion (Male)",
+    Castform: "Castform (Normal)", Floette: "Floette (Eternal Flower)", Florges: "Florges (Red Flower)", Furfrou: "Furfrou (Natural Form)",
+    Gourgeist: "Gourgeist (Medium Variety)", Lycanroc: "Lycanroc (Midday Form)", Maushold: "Maushold (Family of Three)",
+    Meowstic: "Meowstic (Male)", Mimikyu: "Mimikyu (Disguised Form)", Morpeko: "Morpeko (Full Belly Mode)",
+    Palafin: "Palafin (Zero Form)", Polteageist: "Polteageist (Phony Form)", Sinistcha: "Sinistcha (Unremarkable Form)",
+    Vivillon: "Vivillon (Icy Snow Pattern)",
+  };
+  if (forms.includes(defaults[base])) return defaults[base];
+  const preferred = ["normal", "shieldforme", "middayform", "disguisedform", "naturalform", "male", "zeroform", "fullbellymode", "phonyform", "unremarkableform", "mediumvariety", "vanillacream", "redflower"];
+  return forms.find((name) => preferred.some((suffix) => normalizeName(name).endsWith(suffix))) || forms[0] || base;
+}
+
+function canonicalSpeciesName(name) {
+  const exact = speciesList.find((species) => normalizeName(species) === normalizeName(name));
+  if (exact) return exact;
+  const aliases = {
+    floetteeternal: "Floette (Eternal Flower)", aegislashshield: "Aegislash (Shield Forme)", aegislashblade: "Aegislash (Blade Forme)",
+    meowsticf: "Meowstic (Female)", basculegionf: "Basculegion (Female)", mausholdfour: "Maushold (Family of Four)", palafinhero: "Palafin (Hero Form)",
+    raichualola: "Raichu (Alolan)", ninetalesalola: "Ninetales (Alolan)", arcaninehisui: "Arcanine (Hisuian)", slowbrogalar: "Slowbro (Galarian)",
+    taurospaldeacombat: "Tauros (Paldean Combat Breed)", taurospaldeaaqua: "Tauros (Paldean Aqua Breed)", taurospaldeablaze: "Tauros (Paldean Blaze Breed)",
+    typhlosionhisui: "Typhlosion (Hisuian)", slowkinggalar: "Slowking (Galarian)", samurotthisui: "Samurott (Hisuian)", zoroarkhisui: "Zoroark (Hisuian)",
+    stunfiskgalar: "Stunfisk (Galarian)", goodrahisui: "Goodra (Hisuian)", avalugghisui: "Avalugg (Hisuian)", decidueyehisui: "Decidueye (Hisuian)",
+    rotomheat: "Rotom (Heat)", rotomwash: "Rotom (Wash)", rotomfrost: "Rotom (Frost)", rotomfan: "Rotom (Fan)", rotommow: "Rotom (Mow)",
+    gourgeistsmall: "Gourgeist (Small Variety)", gourgeistlarge: "Gourgeist (Large Variety)", gourgeistsuper: "Gourgeist (Jumbo Variety)",
+    lycanrocmidday: "Lycanroc (Midday Form)", lycanrocmidnight: "Lycanroc (Midnight Form)", lycanrocdusk: "Lycanroc (Dusk Form)",
+    morpekohangry: "Morpeko (Hangry Mode)",
+  };
+  const alias = aliases[normalizeName(name)];
+  if (alias && speciesList.includes(alias)) return alias;
+  const base = pokemonList.find((candidate) => normalizeName(candidate) === normalizeName(name));
+  return base ? defaultSpeciesForBase(base) : name;
 }
 
 function setItemList(data) {
@@ -595,6 +675,7 @@ function initSetLibraries() {
     (entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index,
   );
   savedSets = loadSavedSets();
+  rebuildSetIndexes();
 
   document.querySelectorAll("[data-set-card]").forEach((card) => {
     refreshSetLibrary(card);
@@ -624,14 +705,44 @@ function loadSavedSets() {
 
 function persistSavedSets() {
   localStorage.setItem(savedSetsKey, JSON.stringify(savedSets));
+  rebuildSetIndexes();
 }
 
 function setsForPokemon(pokemon) {
-  const key = normalizeName(pokemon);
+  const key = normalizeName(baseSpeciesName(canonicalSpeciesName(pokemon)));
   return {
-    builtIn: builtInSets.filter((entry) => normalizeName(entry.pokemon) === key),
-    saved: savedSets.filter((entry) => normalizeName(entry.pokemon) === key),
+    builtIn: builtInSetsByPokemon.get(key) || [],
+    saved: savedSetsByPokemon.get(key) || [],
   };
+}
+
+function rebuildSetIndexes() {
+  builtInSetsByPokemon = indexSetsByPokemon(builtInSets);
+  savedSetsByPokemon = indexSetsByPokemon(savedSets);
+  rebuildPokemonOptionSearchList();
+}
+
+function indexSetsByPokemon(sets) {
+  const index = new Map();
+  for (const set of sets) {
+    const key = normalizeName(baseSpeciesName(canonicalSpeciesName(set.pokemon)));
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(set);
+  }
+  return index;
+}
+
+function rebuildPokemonOptionSearchList() {
+  pokemonOptionSearchList = pokemonSearchList.flatMap(({ name, key }) => {
+    const sets = (builtInSetsByPokemon.get(key) || []).map((set) => ({
+      name: `${name} (${set.name})`, pokemon: name, setName: set.name, setId: set.id,
+      key: normalizeName(`${name} ${set.name}`),
+    }));
+    return [{ name, pokemon: name, key }, ...sets, {
+      name: `${name} (Blank Set)`, pokemon: name, setName: "Blank Set", setId: "blank", key: `${key}blankset`,
+    }];
+  });
+  document.querySelectorAll?.("[data-pokemon-options]").forEach((node) => delete node.dataset.renderKey);
 }
 
 function refreshSetLibrary(card) {
@@ -661,7 +772,7 @@ function applySetLibrarySelection(card, id) {
   if (!editor) return;
   const pokemon = parseSet(editor.value).name;
   const entry = [...builtInSets, ...savedSets].find((candidate) => candidate.id === id);
-  editor.value = id === "blank" ? buildBlankPokemonSet(card, pokemon) : entry?.text || editor.value;
+  editor.value = id === "blank" ? buildBlankPokemonSet(card, pokemon) : setToMegaFormFromItem(entry?.text || editor.value);
   if (entry && id.startsWith("saved:")) card.dataset.activeSavedSet = id;
   else delete card.dataset.activeSavedSet;
   syncRawEditor(editor);
@@ -840,6 +951,35 @@ function initPokemonSelectors() {
   });
 }
 
+function initFormSelectors() {
+  document.querySelectorAll("[data-form-selector]").forEach((select) => {
+    select.addEventListener("change", () => applyFormSelection(select.dataset.formSelector, select.value));
+  });
+}
+
+function syncFormSelector(card, species) {
+  const control = card.querySelector("[data-form-control]");
+  const select = card.querySelector("[data-form-selector]");
+  if (!control || !select || !speciesForms.size) return;
+  const base = baseSpeciesName(species);
+  const forms = speciesForms.get(base) || [];
+  control.hidden = forms.length <= 1;
+  if (forms.length <= 1) return;
+  select.innerHTML = forms.map((form) => `<option value="${escapeAttr(form)}">${escapeHtml(formLabel(base, form))}</option>`).join("");
+  const canonical = canonicalSpeciesName(species);
+  select.value = forms.includes(canonical) ? canonical : defaultSpeciesForBase(base);
+}
+
+function formLabel(base, species) {
+  if (normalizeName(base) === normalizeName(species)) return "Base Form";
+  if (species.startsWith("Mega ")) {
+    const suffix = species.slice(5 + base.length).trim();
+    return suffix ? `Mega ${suffix}` : "Mega";
+  }
+  const detail = species.match(/\((.+)\)$/)?.[1];
+  return detail || species;
+}
+
 function initItemSelectors() {
   document.querySelectorAll("[data-item-combobox]").forEach((combo) => {
     const cardKey = combo.dataset.itemCombobox;
@@ -940,19 +1080,7 @@ function setActivePokemonOption(options, index) {
 }
 
 function fuzzyPokemonMatches(query, limit) {
-  const entries = pokemonSearchList.flatMap(({ name, key }) => {
-    const sets = setsForPokemon(name).builtIn.map((set) => ({
-      name: `${name} (${set.name})`,
-      pokemon: name,
-      setName: set.name,
-      setId: set.id,
-      key: normalizeName(`${name} ${set.name}`),
-    }));
-    return [{ name, pokemon: name, key }, ...sets, {
-      name: `${name} (Blank Set)`, pokemon: name, setName: "Blank Set", setId: "blank", key: `${key}blankset`,
-    }];
-  });
-  return fuzzyMatches(entries, query, limit);
+  return fuzzyMatches(pokemonOptionSearchList, query, limit);
 }
 
 function fuzzyItemMatches(query, limit) {
@@ -989,20 +1117,21 @@ function applyPokemonSelection(cardKey, rawName, setId = "") {
   const editor = card?.querySelector(".raw-editor");
   if (!card || !editor) return;
 
-  const selected = pokemonList.find((name) => normalizeName(name) === normalizeName(rawName));
-  if (!selected) return;
+  const selectedBase = pokemonList.find((name) => normalizeName(name) === normalizeName(rawName));
+  if (!selectedBase) return;
+  const selected = defaultSpeciesForBase(selectedBase);
   const previous = parseSet(editor.value).name;
   const selector = card.querySelector("[data-pokemon-selector]");
   const choice = card.querySelector("[data-pokemon-choice]");
-  if (selector) selector.value = selected;
-  if (choice) choice.replaceChildren(document.createTextNode(selected));
+  if (selector) selector.value = selectedBase;
+  if (choice) choice.replaceChildren(document.createTextNode(selectedBase));
   if (setId && setId !== "blank") {
     const preset = builtInSets.find((entry) => entry.id === setId);
     if (preset) {
       editor.value = preset.text;
       delete card.dataset.activeSavedSet;
       syncRawEditor(editor);
-      const label = `${selected} (${preset.name})`;
+      const label = `${selectedBase} (${preset.name})`;
       if (selector) selector.value = label;
       if (choice) choice.replaceChildren(document.createTextNode(label));
       refreshSetLibrary(card);
@@ -1025,11 +1154,29 @@ function applyPokemonSelection(cardKey, rawName, setId = "") {
   resetCardTraining(card);
   resetCardBoosts(card);
   clearCardMoves(card);
-  const commonSet = setsForPokemon(selected).builtIn[0];
+  const commonSet = setsForPokemon(selected).builtIn[0] || setsForPokemon(selectedBase).builtIn[0];
   let nextSet = commonSet?.text || buildBlankPokemonSet(card, selected);
   const megaStone = !commonSet && megaStoneForPokemon(selected);
   if (megaStone) nextSet = setFirstLineItem(nextSet, megaStone);
   editor.value = nextSet;
+  delete card.dataset.activeSavedSet;
+  syncRawEditor(editor);
+  refreshSetLibrary(card);
+  saveState();
+  autoRun();
+}
+
+function applyFormSelection(cardKey, species) {
+  const card = document.querySelector(`[data-set-card="${cardKey}"]`);
+  const editor = card?.querySelector(".raw-editor");
+  if (!card || !editor || !speciesList.includes(species)) return;
+  let text = setFirstLineSpecies(editor.value, species);
+  const megaStone = megaStoneForPokemon(species);
+  const currentItem = parseSet(text).item;
+  if (megaStone) text = setFirstLineItem(text, megaStone);
+  else if (Object.hasOwn(megaStonePokemon, currentItem)) text = setFirstLineItem(text, "None");
+  text = replaceOrInsertLine(text, /^Ability:/i, `Ability: ${primaryAbility(species) || "None"}`);
+  editor.value = text;
   delete card.dataset.activeSavedSet;
   syncRawEditor(editor);
   refreshSetLibrary(card);
@@ -1061,6 +1208,13 @@ function setFirstLineItem(text, item) {
   const lines = text.split(/\r?\n/);
   const [rawName = "Unknown"] = (lines[0] || "Unknown").split("@").map((part) => part.trim());
   lines[0] = normalizeName(item) === "none" ? rawName : `${rawName} @ ${item}`;
+  return lines.join("\n");
+}
+
+function setFirstLineSpecies(text, species) {
+  const lines = text.split(/\r?\n/);
+  const item = (lines[0] || "").split("@").slice(1).join("@").trim();
+  lines[0] = item && normalizeName(item) !== "none" ? `${species} @ ${item}` : species;
   return lines.join("\n");
 }
 
@@ -1713,6 +1867,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initToggles();
   initPersistentInputs();
   initPokemonSelectors();
+  initFormSelectors();
   initItemSelectors();
   initSpBoxes();
   initBoostBoxes();

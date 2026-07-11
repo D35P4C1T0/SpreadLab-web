@@ -116,8 +116,11 @@ small { display: block; color: var(--muted); font-size: 11px; }
 .raw-toggle[aria-expanded="true"] { border-color: var(--cyan-2); color: var(--cyan); }
 
 .slot { min-height: 34px; padding: 0; background: transparent; }
-.pokemon-slot { display: flex; align-items: center; }
+.pokemon-slot { display: flex; align-items: end; gap: 8px; }
 .defender-slot { display: flex; align-items: center; gap: 8px; }
+.form-selector { flex: 0 1 180px; min-width: 120px; color: var(--dim); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+.form-selector select { height: 32px; margin-top: 2px; font-size: 11px; text-transform: none; }
+.form-selector[hidden] { display: none; }
 .defender-slot > label { flex: 0 0 70px; display: flex; align-items: center; gap: 5px; }
 .defender-slot input { width: 49px; height: 30px; padding: 0 4px; text-align: center; }
 .pokemon-combobox, .select2-container { position: relative; flex: 1; min-width: 0; }

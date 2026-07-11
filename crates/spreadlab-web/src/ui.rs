@@ -138,9 +138,9 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260711-1"/>
-        <script src="/assets/setdex_ncp-g10.js?v=20260711-1"></script>
-        <script defer src="/assets/app.js?v=20260711-1"></script>
+        <link rel="stylesheet" href="/assets/app.css?v=20260711-4"/>
+        <script src="/assets/setdex_ncp-g10.js?v=20260711-4"></script>
+        <script defer src="/assets/app.js?v=20260711-4"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -198,7 +198,7 @@ fn pokemon_sets(mode: Mode) -> String {
   <div class="card-grid">
     <article class="poke-card {attacker_optimized}" data-set-card="attacker">
       <div class="card-head"><div><span class="side-kicker">Attacking side</span><b>Attacker</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
-      <div class="slot pokemon-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="attacker"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Attacker Pokemon"><span class="select2-chosen" data-pokemon-choice="attacker">Kingambit</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="attacker"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="attacker" value="Kingambit" autocomplete="off" role="combobox" aria-label="Search Attacker Pokemon"/></div><div class="pokemon-options" data-pokemon-options="attacker" role="listbox"></div></div></div></div>
+      <div class="slot pokemon-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="attacker"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Attacker Pokemon"><span class="select2-chosen" data-pokemon-choice="attacker">Kingambit</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="attacker"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="attacker" value="Kingambit" autocomplete="off" role="combobox" aria-label="Search Attacker Pokemon"/></div><div class="pokemon-options" data-pokemon-options="attacker" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="attacker" aria-label="Attacker form"></select></label></div>
       {set_library}
       <div class="poke-row">
         <div class="sprite"><img data-sprite-name="Kingambit" src="/api/sprite/Kingambit" alt="Kingambit sprite"/></div>
@@ -224,7 +224,7 @@ fn pokemon_sets(mode: Mode) -> String {
     </article>
     <article class="poke-card {defender_optimized}" data-set-card="defender">
       <div class="card-head"><div><span class="side-kicker">Defending side</span><b>{defender_label}</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
-      <div class="slot defender-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="defender"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Defender Pokemon"><span class="select2-chosen" data-pokemon-choice="defender">Floette-Mega</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="defender"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="defender" value="Floette-Mega" autocomplete="off" role="combobox" aria-label="Search Defender Pokemon"/></div><div class="pokemon-options" data-pokemon-options="defender" role="listbox"></div></div></div><label>HP %<input name="hp_percent" type="number" value="100"/></label></div>
+      <div class="slot defender-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="defender"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Defender Pokemon"><span class="select2-chosen" data-pokemon-choice="defender">Floette</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="defender"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="defender" value="Floette" autocomplete="off" role="combobox" aria-label="Search Defender Pokemon"/></div><div class="pokemon-options" data-pokemon-options="defender" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="defender" aria-label="Defender form"></select></label><label>HP %<input name="hp_percent" type="number" value="100"/></label></div>
       {set_library}
       <div class="poke-row">
         <div class="sprite"><img data-sprite-name="Floette-Mega" src="/api/sprite/Floette-Mega" alt="Floette-Mega sprite"/></div>

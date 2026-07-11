@@ -15,8 +15,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, OnceLock},
-    time::Duration,
+    sync::Arc,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -45,9 +44,6 @@ enum Command {
 struct AppState {
     data: Arc<ChampionsData>,
 }
-
-static POKEAPI_SPECIES_NAMES: OnceLock<Vec<String>> = OnceLock::new();
-static POKEAPI_POKEMON_NAMES: OnceLock<Vec<String>> = OnceLock::new();
 
 const POKEMON_CHAMPIONS_ITEMS: &[&str] = &[
     "Abomasite",
@@ -486,20 +482,11 @@ async fn api_move_types(State(state): State<AppState>) -> Json<HashMap<String, S
 }
 
 async fn api_pokemon_list(State(state): State<AppState>) -> Json<Vec<String>> {
-    let mut names = state
+    let names = state
         .data
         .species_names()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-
-    let (species_names, pokemon_names) = tokio::join!(
-        cached_pokeapi_species_names(),
-        cached_pokeapi_pokemon_names()
-    );
-    names.extend(species_names);
-    names.extend(pokemon_names);
-    names.extend(ZA_MEGA_FALLBACKS.iter().map(|name| (*name).to_owned()));
-
     Json(names.into_iter().collect())
 }
 
@@ -509,134 +496,6 @@ async fn api_item_list(State(_state): State<AppState>) -> Json<Vec<String>> {
         .collect::<BTreeSet<_>>();
     names.insert("None".to_owned());
     Json(names.into_iter().collect())
-}
-
-const ZA_MEGA_FALLBACKS: &[&str] = &[
-    "Mega Raichu",
-    "Mega Raichu X",
-    "Mega Raichu Y",
-    "Mega Clefable",
-    "Mega Victreebel",
-    "Mega Starmie",
-    "Mega Dragonite",
-    "Mega Meganium",
-    "Mega Feraligatr",
-    "Mega Skarmory",
-    "Mega Chimecho",
-    "Mega Absol Z",
-    "Mega Staraptor",
-    "Mega Garchomp Z",
-    "Mega Lucario Z",
-    "Mega Froslass",
-    "Mega Heatran",
-    "Mega Darkrai",
-    "Mega Emboar",
-    "Mega Excadrill",
-    "Mega Scolipede",
-    "Mega Scrafty",
-    "Mega Eelektross",
-    "Mega Chandelure",
-    "Mega Golurk",
-    "Mega Chesnaught",
-    "Mega Delphox",
-    "Mega Greninja",
-    "Mega Pyroar",
-    "Mega Floette",
-    "Mega Meowstic",
-    "Mega Malamar",
-    "Mega Barbaracle",
-    "Mega Dragalge",
-    "Mega Hawlucha",
-    "Mega Zygarde",
-    "Mega Crabominable",
-    "Mega Golisopod",
-    "Mega Drampa",
-    "Mega Magearna",
-    "Mega Zeraora",
-    "Mega Falinks",
-    "Mega Scovillain",
-    "Mega Glimmora",
-    "Mega Tatsugiri",
-    "Mega Baxcalibur",
-];
-
-#[derive(Deserialize)]
-struct PokeApiResourceList {
-    results: Vec<PokeApiNamedResource>,
-}
-
-#[derive(Deserialize)]
-struct PokeApiNamedResource {
-    name: String,
-}
-
-async fn fetch_pokeapi_resource_names(resource: &str) -> Option<Vec<String>> {
-    let url = format!("https://pokeapi.co/api/v2/{resource}?limit=100000&offset=0");
-    let response = tokio::time::timeout(Duration::from_millis(1500), reqwest::get(url))
-        .await
-        .ok()?
-        .ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    let data = response.json::<PokeApiResourceList>().await.ok()?;
-    Some(
-        data.results
-            .into_iter()
-            .map(|entry| pokeapi_resource_display_name(&entry.name))
-            .collect(),
-    )
-}
-
-async fn cached_pokeapi_species_names() -> Vec<String> {
-    if let Some(names) = POKEAPI_SPECIES_NAMES.get() {
-        return names.clone();
-    }
-    let names = fetch_pokeapi_resource_names("pokemon-species")
-        .await
-        .unwrap_or_default();
-    let _ = POKEAPI_SPECIES_NAMES.set(names);
-    POKEAPI_SPECIES_NAMES.get().cloned().unwrap_or_default()
-}
-
-async fn cached_pokeapi_pokemon_names() -> Vec<String> {
-    if let Some(names) = POKEAPI_POKEMON_NAMES.get() {
-        return names.clone();
-    }
-    let names = fetch_pokeapi_resource_names("pokemon")
-        .await
-        .unwrap_or_default();
-    let _ = POKEAPI_POKEMON_NAMES.set(names);
-    POKEAPI_POKEMON_NAMES.get().cloned().unwrap_or_default()
-}
-
-fn pokeapi_resource_display_name(name: &str) -> String {
-    let parts = name.split('-').collect::<Vec<_>>();
-    if let Some(mega_index) = parts.iter().position(|part| *part == "mega") {
-        let base = title_segments(&parts[..mega_index], " ");
-        let suffix = title_segments(&parts[mega_index + 1..], " ");
-        return if suffix.is_empty() {
-            format!("Mega {base}")
-        } else {
-            format!("Mega {base} {suffix}")
-        };
-    }
-    title_segments(&parts, "-")
-}
-
-fn title_segments(parts: &[&str], separator: &str) -> String {
-    parts
-        .iter()
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(separator)
 }
 
 async fn api_species_types(State(state): State<AppState>) -> Json<HashMap<String, Vec<String>>> {
