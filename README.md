@@ -129,3 +129,26 @@ Direct damage effects use the engine's mechanics. Leek's critical-hit probabilit
 Rocky Helmet retaliation, switching items, trapping duration, and terrain duration
 are not simulated by the single-attack calculator. Set critical hits and battle
 state explicitly where applicable.
+
+## UI development and browser checks
+
+The responsive workspace uses the shared controls in `src/ui.rs`, the hand-written
+`assets/app.css` stylesheet, and presentation helpers in `assets/app.js` (paths
+relative to `crates/spreadlab-web`). Calculator requests and domain logic stay in
+the existing adapter. The optimized side's six SP values are a read-only result
+preview; they do not add constraints to optimization.
+
+With the server running, install and run the browser checks using pnpm:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+pnpm test:catalog
+pnpm test:ui
+```
+
+To use an existing Chromium installation, set `CHROMIUM_PATH=/usr/bin/chromium`.
+`SPREADLAB_URL` overrides the default `http://127.0.0.1:3000` test server.
+`SPREADLAB_SCREENSHOTS=/tmp/spreadlab-screenshots` saves captures at 1440×900,
+1280×800, 1024×768, and 390×844. Tests cover real damage, both optimizer modes,
+keyboard conditions, crit persistence, sets, forms, swapping, and failure states.

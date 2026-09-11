@@ -266,7 +266,7 @@ function rewriteCardSet(card) {
 
 function renderCard(card, parsed) {
   const name = card.querySelector('[data-field="name"]');
-  if (name) name.innerHTML = `${parsed.name} <em>${card.dataset.setCard === "attacker" ? "♂" : "♀"}</em>`;
+  if (name) name.textContent = parsed.name;
   const selector = card.querySelector("[data-pokemon-selector]");
   if (selector && document.activeElement !== selector) selector.value = parsed.name;
   const choice = card.querySelector("[data-pokemon-choice]");
@@ -309,6 +309,7 @@ function renderCard(card, parsed) {
 
   const moves = card.querySelector('[data-field="moves"]');
   if (moves) {
+    const crits = new Map([...moves.querySelectorAll("[data-crit-move]")].map(input => [input.dataset.critMove, input.checked]));
     if (!parsed.moves.length) {
       moves.innerHTML = `<div class="empty-moves">No moves selected</div>`;
     } else {
@@ -319,7 +320,7 @@ function renderCard(card, parsed) {
     moves.innerHTML = parsed.moves.map((move) => {
       const type = moveType(move);
       const icon = type === "Unknown" ? "" : `<img src="/assets/type-icons/${escapeAttr(type.toLowerCase())}.svg" alt="" aria-hidden="true"/>`;
-      return `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button"><span class="move-name">${escapeHtml(move)}</span><span class="move-type-badge ${typeClass(type)}" aria-label="${escapeAttr(type)} type">${icon}<span class="move-type-name">${escapeHtml(type)}</span></span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`;
+      return `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button"><span class="move-name">${escapeHtml(move)}</span><span class="move-type-badge ${typeClass(type)}" aria-label="${escapeAttr(type)} type">${icon}<span class="move-type-name">${escapeHtml(type)}</span></span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}" ${crits.get(move) ? "checked" : ""}/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`;
     }).join("");
     if (card.dataset.setCard === "attacker") setSelectedMove(selectedMove);
     }
@@ -334,6 +335,7 @@ function renderCard(card, parsed) {
   }
   applyNatureClasses(card);
   syncAbilityEffects();
+  syncStatPresentation();
 }
 
 async function loadMoveTypes() {
@@ -515,6 +517,7 @@ function setSelectedMove(moveName) {
   if (moveInput) moveInput.value = moveName;
   document.querySelectorAll(".move").forEach((node) => {
     node.classList.toggle("selected", node.dataset.move === moveName);
+    node.querySelector(".move-select")?.setAttribute("aria-pressed", String(node.dataset.move === moveName));
   });
   syncMoveEffectField(moveName);
 }
@@ -559,7 +562,7 @@ function initToggles() {
     const input = label.querySelector("input");
     const sync = () => label.classList.toggle("is-on", input.checked);
     sync();
-    label.addEventListener("click", () => setTimeout(() => {
+    input.addEventListener("change", () => {
       delete input.dataset.auto;
       if (input.type === "radio") {
         document.querySelectorAll(`input[name="${input.name}"]`).forEach((peer) => {
@@ -568,7 +571,7 @@ function initToggles() {
       } else sync();
       saveState();
       autoRun();
-    }, 0));
+    });
   });
 }
 
@@ -841,7 +844,7 @@ function initMoves() {
       autoRun();
       return;
     }
-    if (event.target.closest(".move-select") && move.dataset.move) setSelectedMove(move.dataset.move);
+    if (move.dataset.move) setSelectedMove(move.dataset.move);
     saveState();
     autoRun();
   });
@@ -1522,6 +1525,8 @@ function initRun() {
     const controller = new AbortController();
     runController = controller;
     panel.classList.add("loading");
+    const mobileResult = document.querySelector("[data-mobile-result]");
+    if (mobileResult) mobileResult.textContent = "Recalculating…";
     panel.setAttribute("aria-busy", "true");
     try {
       const { path, body } = currentPayload();
@@ -1530,10 +1535,16 @@ function initRun() {
       if (!response.ok) throw new Error(data.error || response.statusText);
       if (controller.signal.aborted) return;
       await attachBestDamageRolls(data, path, body, controller.signal);
+      const rollsOpen = panel.querySelector(".damage-rolls")?.open || false;
       panel.innerHTML = renderResults(data);
+      const rolls = panel.querySelector(".damage-rolls");
+      if (rolls) rolls.open = rollsOpen;
+      updateResultPresentation(data);
       initShare();
     } catch (error) {
       if (error.name === "AbortError") return;
+      if (mobileResult) mobileResult.textContent = "Calculation failed";
+      clearOptimizedPreview();
       panel.innerHTML = `<div class="results-head"><b>Error</b><span>0 results</span></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
     } finally {
       if (runController === controller) {
@@ -1618,8 +1629,8 @@ function renderResults(data) {
   const best = data.best || matches[0] || null;
   const count = matches.length;
   const bestLabel = best?.sp_line || "No match";
-  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {}, best.rolls)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
-  return resultShell("Results", `${count} results`, bestLabel, body);
+  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {}, best.rolls)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
+  return resultShell("Results", `${count} matching spreads`, bestLabel, body);
 }
 
 function warningsCard(warnings) {
@@ -1632,23 +1643,59 @@ function resultShell(title, count, best, body) {
 ${body}<div class="result-actions"><button type="button" disabled aria-disabled="true">▣ Copy Set</button><button type="button" disabled aria-disabled="true">⇩ Download JSON</button><button class="share-action" type="button" disabled aria-disabled="true">↗ Share Link</button></div>`;
 }
 
+function spreadSummary(line) {
+  return String(line || "–").replace(/^SPs:\s*/i, "");
+}
+
 function bestCard(best) {
   const stats = best.final_stats || {};
-  return `<article class="best-card" data-tab-panel="best"><h2>Best Spread</h2><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "-")}</b><em>API selected</em></div><div class="spread-big">${escapeHtml(best.sp_line || "-")}<small>Total SP: ${best.total_points ?? "-"} / 66</small></div><div><small>KO Chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b><small>from optimizer</small></div></div>${finalStats(stats)}</article>`;
+  return `<article class="best-card" data-tab-panel="best"><div class="best-heading"><h2>Best spread</h2><span class="result-status">✓ Target met</span></div><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "–")}</b></div><div class="spread-big">${escapeHtml(spreadSummary(best.sp_line))}<small>${best.total_points ?? "–"} / 66 SP used</small></div><div><small>KO chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b></div></div>${finalStats(stats)}</article>`;
 }
 
 function damageCard(summary, rolls = summary.rolls || []) {
-  const pmax = Number(summary.percent_max || 0);
+  const pmax = Math.max(0, Math.min(100, Number(summary.percent_max || 0)));
+  const pmin = Math.max(0, Math.min(100, Number(summary.percent_min || 0)));
   const move = document.querySelector('[name="move_name"]')?.value || "Selected move";
+  const defender = parseSet(document.querySelector('[data-set-card="defender"] .raw-editor')?.value || "").name;
   const damageRolls = Array.isArray(rolls) && rolls.length
-    ? `<div class="damage-rolls"><small>Damage rolls (${rolls.length})</small><code>[${rolls.map((roll) => escapeHtml(roll)).join(", ")}]</code></div>`
+    ? `<details class="damage-rolls"><summary>${rolls.length} damage rolls</summary><code>${rolls.map((roll) => escapeHtml(roll)).join(", ")}</code></details>`
     : "";
-  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title">vs <b>${escapeHtml(move)}</b> <span>API</span><em>PASS</em></div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "-"} - ${summary.max_damage ?? "-"}</b><span>${fmt(summary.percent_min)}% - ${fmt(summary.percent_max)}%</span></div><div><small>KO Chance</small><b>${percent(summary.ko_chance)}</b><span>calculated</span></div><div><small>Max damage</small><b>${summary.max_damage ?? "-"} HP</b><span>raw HP damage</span></div></div><div class="meter"><span style="width: ${Math.max(0, Math.min(100, pmax))}%"></span></div>${damageRolls}<p>Goal evaluated by API <strong>Live result</strong></p></article>`;
+  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title"><b>${escapeHtml(move)}</b><span class="matchup-arrow" aria-label="against">→</span><b>${escapeHtml(defender)}</b></div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
 }
 
 function matchesTable(matches) {
-  const rows = matches.slice(0, 12).map((entry) => `<tr><td>${entry.rank ?? "-"}</td><td>${escapeHtml(entry.nature || "-")}</td><td>${escapeHtml(entry.sp_line || "-")}</td><td>${entry.total_points ?? "-"}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "-"} - ${entry.result?.max_damage ?? entry.combined?.max_damage ?? "-"}</td></tr>`).join("");
-  return `<article class="table-card" data-tab-panel="all"><h2>All Results</h2><table><tr><th>Rank</th><th>Nature</th><th>SPs</th><th>Total SP</th><th>KO Chance</th><th>Damage</th></tr>${rows}</table></article>`;
+  const rows = matches.map((entry, index) => `<tr class="${index === 0 ? "best-row" : ""}"><td>${entry.rank ?? index + 1}${index === 0 ? '<span class="sr-only"> (best)</span>' : ''}</td><td>${escapeHtml(entry.nature || "–")}</td><td>${escapeHtml(spreadSummary(entry.sp_line))}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "–"}–${entry.result?.max_damage ?? entry.combined?.max_damage ?? "–"}</td></tr>`).join("");
+  return `<article class="table-card" data-tab-panel="all"><h2>All results</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Ranked optimizer results"><table><thead><tr><th scope="col">Rank</th><th scope="col">Nature</th><th scope="col">SPs</th><th scope="col">KO chance</th><th scope="col">Damage</th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
+}
+
+function clearOptimizedPreview() {
+  document.querySelectorAll("[data-optimized-sp]").forEach((cell) => {
+    cell.textContent = "–";
+    cell.classList.remove("is-modified");
+  });
+}
+
+function updateResultPresentation(data) {
+  const matches = Array.isArray(data) ? data : (data.matches || []);
+  const best = data.best || matches[0];
+  const summary = data.summary || best?.result || best?.combined;
+  const mobile = document.querySelector("[data-mobile-result]");
+  if (mobile) mobile.textContent = summary ? `${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} HP · ${percent(summary.ko_chance)} KO` : "No matching spread";
+  clearOptimizedPreview();
+  if (best?.sp_line) {
+    const parsed = parseSet(`Preview\n${best.sp_line}`);
+    document.querySelectorAll("[data-optimized-sp]").forEach((cell) => {
+      const value = parsed.sps[cell.dataset.optimizedSp] || 0;
+      cell.textContent = value;
+      cell.classList.toggle("is-modified", value !== 0);
+    });
+  }
+}
+
+function syncStatPresentation() {
+  document.querySelectorAll("[data-sp-key], [data-boost-key]").forEach((input) => {
+    input.classList.toggle("is-modified", Number(input.value) !== 0);
+  });
 }
 
 function finalStats(stats) {
@@ -1883,6 +1930,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveState();
   initMoves();
   initSwap();
+  document.querySelector(".workspace")?.addEventListener("input", syncStatPresentation);
+  syncStatPresentation();
   autoRun();
 });
 
