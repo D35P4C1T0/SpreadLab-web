@@ -2463,6 +2463,24 @@ fn champions_item_json_names_align_with_typed_item_variants() {
         Item::Malamarite,
         Item::Barbaracite,
         Item::Dragalgite,
+        Item::Leek,
+        Item::RockyHelmet,
+        Item::AirBalloon,
+        Item::RedCard,
+        Item::BindingBand,
+        Item::EjectButton,
+        Item::NormalGem,
+        Item::TerrainExtender,
+        Item::ElectricSeed,
+        Item::PsychicSeed,
+        Item::MistySeed,
+        Item::GrassySeed,
+        Item::AbsoliteZ,
+        Item::Salamencite,
+        Item::GarchompiteZ,
+        Item::LucarioniteZ,
+        Item::Golisopite,
+        Item::Baxcalibrite,
     ];
     let variant_names = variants
         .into_iter()
@@ -2516,13 +2534,13 @@ fn normalized_champions_data_is_generated_from_champout() {
         serde_json::from_str(damage_calc::data::CHAMPIONS_DATA_JSON).expect("generated data JSON");
 
     assert_eq!(data["schemaVersion"], 1);
-    assert_eq!(data["counts"]["species"], 361);
+    assert_eq!(data["counts"]["species"], 396);
     assert_eq!(data["counts"]["regulationMAForms"], 321);
     assert_eq!(data["counts"]["regulationMARosterNames"], 209);
     assert_eq!(data["counts"]["regulationMBForms"], 359);
     assert_eq!(data["counts"]["regulationMBRosterNames"], 247);
     assert_eq!(data["counts"]["moves"], 920);
-    assert_eq!(data["counts"]["abilities"], 202);
+    assert_eq!(data["counts"]["abilities"], 217);
 
     let species = data["species"].as_array().expect("species array");
     let venusaur = species
@@ -2668,7 +2686,10 @@ fn pinned_reference_inventory_is_complete_and_battle_ready() {
 
     assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 315);
     assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 496);
-    assert_eq!(damage_calc::data::champions::CHAMPIONS_ITEMS.len(), 148);
+    assert_eq!(
+        damage_calc::data::champions::CHAMPIONS_REFERENCE_ITEM_VALUES.len(),
+        148
+    );
     assert_eq!(CHAMPIONS_REFERENCE_ABILITIES.len(), 201);
     assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 123);
 
@@ -3010,4 +3031,151 @@ fn result_reports_resolved_move_and_signed_pain_split_delta() {
     let healing = calc(full_attacker, low_defender, pain_split, Field::default());
     assert_eq!(healing.defender_hp_delta, Some(-30));
     assert_eq!(healing.damage_rolls, vec![0]);
+}
+
+#[test]
+fn regulation_m_c_additions_have_complete_current_data() {
+    use damage_calc::data::champions::*;
+    let additions: serde_json::Value = serde_json::from_str(REGULATION_M_C_ADDITIONS_JSON).unwrap();
+    let data: serde_json::Value =
+        serde_json::from_str(damage_calc::data::CHAMPIONS_DATA_JSON).unwrap();
+    assert_eq!(additions["regular"].as_array().unwrap().len(), 26);
+    assert_eq!(additions["mega"].as_array().unwrap().len(), 6);
+    assert_eq!(REGULATION_M_C_POKEMON.len(), 279);
+    assert_eq!(
+        REGULATION_M_C_POKEMON.iter().collect::<HashSet<_>>().len(),
+        279
+    );
+    assert!(REGULATION_M_B_POKEMON
+        .iter()
+        .all(|name| regulation_m_c_pokemon(name).is_some()));
+    for name in additions["regular"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(additions["mega"].as_array().unwrap())
+    {
+        let name = name.as_str().unwrap();
+        assert_eq!(regulation_m_c_pokemon(name), Some(name));
+        assert!(regulation_m_b_pokemon(name).is_none());
+        let forms: Vec<_> = data["species"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|s| s["displayName"] == name || s["name"] == name)
+            .collect();
+        assert!(!forms.is_empty(), "missing {name}");
+        for form in forms {
+            assert_eq!(form["isRegulationMA"], false);
+            assert_eq!(form["isRegulationMB"], false);
+            assert_eq!(form["isRegulationMC"], true);
+            assert!(!form["legalMoves"].as_array().unwrap().is_empty());
+            let metadata =
+                champions_current_species(form["displayName"].as_str().unwrap()).unwrap();
+            assert!(metadata.weight_kg > 0.0);
+            assert_ne!(metadata.default_ability, Ability::None);
+        }
+    }
+    let lucario = champions_current_species("Mega Lucario Z").unwrap();
+    assert_eq!(
+        lucario.base_stats,
+        StatTable::new(70, 100, 70, 164, 70, 151)
+    );
+    assert_eq!(lucario.default_ability, Ability::AuraGuard);
+    assert_eq!(
+        champions_current_species("Mega Golisopod").unwrap().types,
+        [Some(PokemonType::Bug), Some(PokemonType::Steel)]
+    );
+    assert_eq!(
+        champions_current_species("Mega Garchomp Z")
+            .unwrap()
+            .default_ability,
+        Ability::Levitate
+    );
+    assert_ne!(
+        champions_current_species("Indeedee (Male)")
+            .unwrap()
+            .base_stats,
+        champions_current_species("Indeedee (Female)")
+            .unwrap()
+            .base_stats
+    );
+}
+
+#[test]
+fn regulation_m_c_items_and_mega_stones_are_typed() {
+    use damage_calc::data::{champions::*, items::*};
+    for name in [
+        "Leek",
+        "Rocky Helmet",
+        "Air Balloon",
+        "Red Card",
+        "Binding Band",
+        "Eject Button",
+        "Normal Gem",
+        "Terrain Extender",
+        "Electric Seed",
+        "Psychic Seed",
+        "Misty Seed",
+        "Grassy Seed",
+    ] {
+        assert_eq!(champions_item(name), Some(name));
+        assert!(CHAMPIONS_ITEM_VALUES.iter().any(|(n, _)| *n == name));
+    }
+    for (mega, base, stone) in [
+        ("Mega Absol Z", "Absol", Item::AbsoliteZ),
+        ("Mega Salamence", "Salamence", Item::Salamencite),
+        ("Mega Garchomp Z", "Garchomp", Item::GarchompiteZ),
+        ("Mega Lucario Z", "Lucario", Item::LucarioniteZ),
+        ("Mega Golisopod", "Golisopod", Item::Golisopite),
+        ("Mega Baxcalibur", "Baxcalibur", Item::Baxcalibrite),
+    ] {
+        assert_eq!(locked_item_for_species(mega), Some(stone));
+        assert!(can_mega(stone, base));
+        assert!(!can_mega(stone, "Pikachu"));
+        assert!(!can_fling(stone, base, Ability::None));
+    }
+    assert_eq!(fling_power(Item::Leek), Some(60));
+    assert_eq!(fling_power(Item::RockyHelmet), Some(60));
+    assert_eq!(fling_power(Item::BindingBand), Some(30));
+    assert_eq!(fling_power(Item::TerrainExtender), Some(30));
+    assert!(!can_fling(Item::NormalGem, "Persian", Ability::None));
+}
+
+#[test]
+fn aura_guard_halves_contact_damage_and_can_be_bypassed() {
+    let attacker = stat_100_mon("Attacker", PokemonType::Normal);
+    let mut defender = stat_100_mon("Defender", PokemonType::Normal);
+    let mut move_ = Move::new("Contact", 80, PokemonType::Normal, Category::Physical);
+    move_.makes_contact = true;
+    let baseline = calc(
+        attacker.clone(),
+        defender.clone(),
+        move_.clone(),
+        Field::default(),
+    );
+    defender.ability = Ability::AuraGuard;
+    let guarded = calc(
+        attacker.clone(),
+        defender.clone(),
+        move_.clone(),
+        Field::default(),
+    );
+    assert!(guarded.max_damage < baseline.max_damage);
+    for (reduced, normal) in guarded.damage_rolls.iter().zip(&baseline.damage_rolls) {
+        assert_eq!(*reduced, normal / 2);
+    }
+    for ability in [Ability::MoldBreaker, Ability::LongReach] {
+        let mut bypass = attacker.clone();
+        bypass.ability = ability;
+        assert_eq!(
+            calc(bypass, defender.clone(), move_.clone(), Field::default()).damage_rolls,
+            baseline.damage_rolls
+        );
+    }
+    move_.makes_contact = false;
+    assert_eq!(
+        calc(attacker, defender, move_, Field::default()).damage_rolls,
+        baseline.damage_rolls
+    );
 }

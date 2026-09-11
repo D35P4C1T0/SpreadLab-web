@@ -222,6 +222,8 @@ pub fn fling_power(item: Item) -> Option<u16> {
         None => return Option::None,
         IronBall => 130,
         HardStone => 100,
+        RockyHelmet | Leek => 60,
+        BindingBand | TerrainExtender => 30,
         FlamePlate | SplashPlate | ZapPlate | MeadowPlate | IciclePlate | FistPlate
         | ToxicPlate | EarthPlate | SkyPlate | MindPlate | InsectPlate | StonePlate
         | SpookyPlate | DracoPlate | DreadPlate | IronPlate => 90,
@@ -263,6 +265,12 @@ pub fn can_mega(item: Item, species: &str) -> bool {
 pub fn locked_item_for_species(species: &str) -> Option<Item> {
     use Item::*;
     let item = match species {
+        "Mega Absol Z" => AbsoliteZ,
+        "Mega Salamence" => Salamencite,
+        "Mega Garchomp Z" => GarchompiteZ,
+        "Mega Lucario Z" => LucarioniteZ,
+        "Mega Golisopod" => Golisopite,
+        "Mega Baxcalibur" => Baxcalibrite,
         "Mega Venusaur" => Venusaurite,
         "Mega Charizard X" => CharizarditeX,
         "Mega Charizard Y" => CharizarditeY,
@@ -318,6 +326,12 @@ pub fn locked_item_for_species(species: &str) -> Option<Item> {
 fn mega_stone_user(item: Item) -> Option<&'static str> {
     use Item::*;
     let user = match item {
+        AbsoliteZ => "Absol",
+        Salamencite => "Salamence",
+        GarchompiteZ => "Garchomp",
+        LucarioniteZ => "Lucario",
+        Golisopite => "Golisopod",
+        Baxcalibrite => "Baxcalibur",
         Venusaurite => "Venusaur",
         CharizarditeX | CharizarditeY => "Charizard",
         Blastoisinite => "Blastoise",

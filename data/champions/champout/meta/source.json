@@ -10,17 +10,17 @@
     {
       "path": "raw/personal.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/masterdata/personal.json",
-      "sha256": "efda9f50b5f4007810ba4bd9a574469823be8af585482456f3f48ae7b7d94630"
+      "sha256": "5ab5444e4e08cc692c1c309dc0c113e8ba63e23187f9f6331cc4505db3ab96a7"
     },
     {
       "path": "raw/waza.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/masterdata/waza.json",
-      "sha256": "aec829dbcaa08118b1a84d1475c63ab6dcaa1ea399bcf0c59a349ac8eebbd3a4"
+      "sha256": "f6bfc143b78410ead2d69bebf52dff7ddbed9bb08bfaf7fd0ca2d28f21838ffa"
     },
     {
       "path": "raw/waza_learn.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/masterdata/waza_learn.json",
-      "sha256": "7a74212af7a567dcb46039f61d8d477667413e7a2004ccc487ae2bf344e6c731"
+      "sha256": "fa40af93a85ad57b7308332e498437bed35be42c526a237b02f0af314e766b1a"
     },
     {
       "path": "raw/wazaname.json",
@@ -30,7 +30,7 @@
     {
       "path": "raw/wazainfo_syn.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/rom-txt/usa/wazainfo_syn.json",
-      "sha256": "7966c1fce24b4e24e6c9210fb4659e5719ddc2a700ca6e9b39101fb9e99603bf"
+      "sha256": "bf2f6247a7b159f5c959709a43408462b3d25abf22046c46ff515a47d2e488fc"
     },
     {
       "path": "raw/monsname_syn.json",
@@ -40,17 +40,17 @@
     {
       "path": "raw/zkn_form_syn.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/rom-txt/usa/zkn_form_syn.json",
-      "sha256": "9f7c6b9c34c679606c6eb53ada07aaa108100f2c5145b02c203605fdda25971b"
+      "sha256": "f5aee898684e0ef87b167af6c66f1d6f75d2131bed68711d27cedac1f480100c"
     },
     {
       "path": "raw/tokusei.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/rom-txt/usa/tokusei.json",
-      "sha256": "0e309affbfb3b58d1bd543a1048b303efaca72cfefff93b8c8fd2b5e462aec15"
+      "sha256": "49d306f1459604648b92f4997b203a4bc656670e1e21080bca3e009b8b0926dd"
     },
     {
       "path": "raw/tokuseiinfo_syn.json",
       "url": "https://raw.githubusercontent.com/projectpokemon/champout/main/rom-txt/usa/tokuseiinfo_syn.json",
-      "sha256": "7308fede35683cf4b480e40dba008adde8295c958b2f7a341a2d1ef57ac2585b"
+      "sha256": "c34916fbc3be357146b3dda25aaf09a53523ebf76de159b205587c5100159813"
     }
   ]
 }

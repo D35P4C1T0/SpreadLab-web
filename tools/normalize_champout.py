@@ -12,6 +12,7 @@ RAW = ROOT / "data" / "champions" / "champout" / "raw"
 OUT = ROOT / "data" / "champions" / "generated" / "champions-data.json"
 ROSTER_M_A = ROOT / "data" / "champions" / "regulation_m_a_pokemon.json"
 ROSTER_M_B_ADDITIONS = ROOT / "data" / "champions" / "regulation_m_b_additions.json"
+ROSTER_M_C_ADDITIONS = ROOT / "data" / "champions" / "regulation_m_c_additions.json"
 
 TYPE_BY_CODE = {
     "0": "Normal",
@@ -48,6 +49,11 @@ def read_json(path: Path):
 def regulation_m_b_roster() -> list[str]:
     additions = read_json(ROSTER_M_B_ADDITIONS)
     return read_json(ROSTER_M_A) + additions["regular"] + additions["mega"]
+
+
+def regulation_m_c_roster() -> list[str]:
+    additions = read_json(ROSTER_M_C_ADDITIONS)
+    return regulation_m_b_roster() + additions["regular"] + additions["mega"]
 
 
 def regulation_m_b_additions() -> set[str]:
@@ -178,6 +184,9 @@ def build_species(
     legal_roster_m_a = set(read_json(ROSTER_M_A))
     legal_roster_m_b = set(regulation_m_b_roster())
     new_m_b_entries = regulation_m_b_additions()
+    additions_c = read_json(ROSTER_M_C_ADDITIONS)
+    new_m_c_entries = set(additions_c["regular"] + additions_c["mega"])
+    legal_roster_m_c = set(regulation_m_c_roster())
     species = []
     for row in read_json(RAW / "personal.json"):
         species_name = species_names.get(row["ms_name_lbl"], row["ms_name_lbl"])
@@ -190,7 +199,10 @@ def build_species(
         ]
         move_ids = learnsets.get(row["id"], [])
         regulation_m_a_match = None
-        if display_name not in new_m_b_entries:
+        if (
+            display_name not in new_m_b_entries | new_m_c_entries
+            and species_name not in new_m_c_entries
+        ):
             regulation_m_a_match = roster_match(
                 display_name,
                 species_name,
@@ -201,6 +213,9 @@ def build_species(
             species_name,
             legal_roster_m_b,
         )
+        if display_name in new_m_c_entries or species_name in new_m_c_entries:
+            regulation_m_b_match = None
+        regulation_m_c_match = roster_match(display_name, species_name, legal_roster_m_c)
         species.append(
             {
                 "id": row["id"],
@@ -213,6 +228,8 @@ def build_species(
                 "regulationMatch": regulation_m_a_match,
                 "regulationMAMatch": regulation_m_a_match,
                 "isRegulationMB": regulation_m_b_match is not None,
+                "isRegulationMC": regulation_m_c_match is not None,
+                "regulationMCMatch": regulation_m_c_match,
                 "regulationMBMatch": regulation_m_b_match,
                 "types": [
                     type_name(row["type1"]),
@@ -260,13 +277,15 @@ def main() -> None:
     payload = {
         "schemaVersion": 1,
         "source": "projectpokemon/champout",
-        "ruleset": "Pokemon Champions Regulation M-A/M-B",
+        "ruleset": "Pokemon Champions Regulation M-A/M-B/M-C",
         "counts": {
             "species": len(species),
             "regulationMAForms": sum(1 for entry in species if entry["isRegulationMA"]),
             "regulationMARosterNames": len(read_json(ROSTER_M_A)),
             "regulationMBForms": sum(1 for entry in species if entry["isRegulationMB"]),
             "regulationMBRosterNames": len(regulation_m_b_roster()),
+            "regulationMCForms": sum(1 for entry in species if entry["isRegulationMC"]),
+            "regulationMCRosterNames": len(regulation_m_c_roster()),
             "moves": len(moves),
             "abilities": len(abilities),
         },

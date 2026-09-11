@@ -14,6 +14,7 @@ DATA = ROOT / "data" / "champions" / "generated" / "champions-data.json"
 ITEMS = ROOT / "data" / "champions" / "items.json"
 ROSTER_M_A = ROOT / "data" / "champions" / "regulation_m_a_pokemon.json"
 ROSTER_M_B_ADDITIONS = ROOT / "data" / "champions" / "regulation_m_b_additions.json"
+ROSTER_M_C_ADDITIONS = ROOT / "data" / "champions" / "regulation_m_c_additions.json"
 OUT = ROOT / "src" / "data" / "champions.rs"
 REFERENCE = ROOT / "data" / "champions" / "generated" / "reference-inventory.json"
 
@@ -51,6 +52,8 @@ def main() -> None:
     items = json.loads(ITEMS.read_text())
     roster_m_a = json.loads(ROSTER_M_A.read_text())
     roster_m_b = regulation_m_b_roster(roster_m_a)
+    additions_c = json.loads(ROSTER_M_C_ADDITIONS.read_text())
+    roster_m_c = roster_m_b + additions_c["regular"] + additions_c["mega"]
     reference = json.loads(REFERENCE.read_text())
     reference_species_by_name = {entry["name"]: entry for entry in reference["pokemon"]}
 
@@ -74,6 +77,8 @@ def main() -> None:
         "    pub is_regulation_m_a: bool,",
         "    /// Whether this species/form is usable under the vendored Regulation M-B roster.",
         "    pub is_regulation_m_b: bool,",
+        "    /// Whether this species/form is usable under Regulation M-C.",
+        "    pub is_regulation_m_c: bool,",
         "}",
         "",
         "/// Lightweight ability entry from normalized Champions data.",
@@ -87,7 +92,7 @@ def main() -> None:
         "    pub description: &'static str,",
         "}",
         "",
-        "/// Exact Pokemon/form metadata used by the pinned browser reference.",
+        "/// Typed Pokemon/form metadata from a Champions data source.",
         "#[derive(Debug, Clone, Copy, PartialEq)]",
         "pub struct ChampionReferenceSpecies {",
         "    pub name: &'static str,",
@@ -231,6 +236,15 @@ def main() -> None:
         ]
     )
     push_string_list(lines, roster_m_b)
+    lines.extend([
+        "];",
+        "",
+        "/// Regulation M-C additions over M-B.",
+        'pub const REGULATION_M_C_ADDITIONS_JSON: &str = include_str!("../../data/champions/regulation_m_c_additions.json");',
+        "/// Regulation M-C legal Pokemon roster names.",
+        "pub const REGULATION_M_C_POKEMON: &[&str] = &[",
+    ])
+    push_string_list(lines, roster_m_c)
     lines.extend(
         [
             "];",
@@ -247,6 +261,7 @@ def main() -> None:
                 f"        display_name: {rust_str(entry['displayName'])},",
                 f"        is_regulation_m_a: {str(entry['isRegulationMA']).lower()},",
                 f"        is_regulation_m_b: {str(entry['isRegulationMB']).lower()},",
+                f"        is_regulation_m_c: {str(entry['isRegulationMC']).lower()},",
                 "    },",
             ]
         )
@@ -454,6 +469,36 @@ def main() -> None:
             "",
         ]
     )
+    lines.extend([
+        "/// Look up a Regulation M-C roster name.",
+        "pub fn regulation_m_c_pokemon(name: &str) -> Option<&'static str> {",
+        "    REGULATION_M_C_POKEMON.iter().copied().find(|entry| *entry == name)",
+        "}",
+        "",
+        "/// Typed items available in Champions, including Regulation M-C additions.",
+        "pub const CHAMPIONS_ITEM_VALUES: &[(&str, Item)] = &[",
+    ])
+    for item in items:
+        lines.append(f"    ({rust_str(item)}, Item::{enum_variant(item)}),")
+    lines.extend(["];", "", "/// Current source-dump species metadata (independent of the pinned browser reference).",
+                  "pub const CHAMPIONS_CURRENT_SPECIES: &[ChampionReferenceSpecies] = &["])
+    for entry in data["species"]:
+        bs = entry["baseStats"]
+        type1, type2 = entry["types"]
+        second = "None" if type1 == type2 else f"Some(PokemonType::{type2})"
+        ability = enum_variant(entry["abilities"][0]["name"])
+        lines.extend([
+            "    ChampionReferenceSpecies {",
+            f"        name: {rust_str(entry['displayName'])},",
+            f"        types: [Some(PokemonType::{type1}), {second}],",
+            f"        base_stats: StatTable::new({bs['hp']}, {bs['attack']}, {bs['defense']}, {bs['specialAttack']}, {bs['specialDefense']}, {bs['speed']}),",
+            f"        weight_kg: {rust_float(entry['weightKg'])},",
+            f"        default_ability: Ability::{ability},",
+            "    },",
+        ])
+    lines.extend(["];", "", "/// Find current source-dump metadata by exact display name.",
+        "pub fn champions_current_species(name: &str) -> Option<ChampionReferenceSpecies> {",
+        "    CHAMPIONS_CURRENT_SPECIES.iter().copied().find(|entry| entry.name == name)", "}", ""])
     OUT.write_text("\n".join(lines))
     subprocess.run(["rustfmt", "--edition", "2021", str(OUT)], check=True)
     print(f"wrote {OUT.relative_to(ROOT)}")

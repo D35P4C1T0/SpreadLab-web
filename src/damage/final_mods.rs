@@ -81,6 +81,9 @@ pub(super) fn calc_final_mods(
     if def_ability == Ability::Fluffy && makes_effective_contact(attacker, move_) {
         push_mod(&mut mods, modifiers, "Fluffy contact", MOD_HALF);
     }
+    if def_ability == Ability::AuraGuard && makes_effective_contact(attacker, move_) {
+        push_mod(&mut mods, modifiers, "Aura Guard", MOD_HALF);
+    }
     if def_ability == Ability::PunkRock && move_.is_sound {
         push_mod(&mut mods, modifiers, "Punk Rock defense", MOD_HALF);
     }

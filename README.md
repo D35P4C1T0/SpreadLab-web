@@ -278,3 +278,10 @@ cargo test
 cargo test --features serde
 cargo package --list
 ```
+
+Regulation M-C data is also available through `REGULATION_M_C_POKEMON`,
+`regulation_m_c_pokemon`, and `ChampionSpeciesSummary::is_regulation_m_c`.
+Use `champions_current_species` for current source-dump stats, types, weights,
+and default abilities, and `CHAMPIONS_ITEM_VALUES` for current typed items.
+Full ability choices and learnsets are in `CHAMPIONS_DATA_JSON`.
+See [data sources and calculation scope](data/champions/README.md) for details.
