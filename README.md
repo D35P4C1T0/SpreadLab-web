@@ -3,7 +3,7 @@
 Dedicated Rust WebUI for [SpreadLab](https://github.com/D35P4C1T0/SpreadLab), a Pokémon Champions damage and spread optimization tool for:
 
 ```text
-[Gen 9 Champions] VGC 2026 Reg M-B
+[Gen 9 Champions] VGC 2026 Reg M-C
 ```
 
 The app is an Axum server with server-rendered Rust UI and a small client-side script for calculator interactions. It consumes the upstream `spreadlab-rs` public API and does not copy damage formulas, stat conversion logic, or optimizer internals.
@@ -110,3 +110,22 @@ node --check crates/spreadlab-web/assets/app.js
 ```
 
 Cached remote sprites are written under `crates/spreadlab-web/assets/sprites-static` and `crates/spreadlab-web/assets/item-sprites`; those directories are intentionally ignored by git.
+
+## Regulation M-C data
+
+The web app pins the M-C [damage engine](https://github.com/D35P4C1T0/pkmn-dmg-lib-rs/commit/b8df8c49122f0f6016ecd049efca1824d59effe4)
+and [SpreadLab adapter](https://github.com/D35P4C1T0/SpreadLab/commit/134666268d180ccb032601d36a02d438b112d655).
+The adapter commit is on upstream's `agent/update-damage-library` branch.
+Species, moves, abilities, and items come from these dependencies, including all
+23 newly usable species, their forms, six Megas, and the 12 new held items.
+The engine refreshed its source data from [Project Pokémon champout](https://github.com/projectpokemon/champout)
+and checked the [official M-C announcement](https://news.pokemon-home.com/en/page/816.html).
+
+NCP presets were checked against upstream commit
+`1c9bf83961dd954f5b3b64e0d101e4a8f12fcf1f` on 2026-09-11; the vendored file was unchanged.
+New Pokémon can be configured manually even when no preset exists.
+
+Direct damage effects use the engine's mechanics. Leek's critical-hit probability,
+Rocky Helmet retaliation, switching items, trapping duration, and terrain duration
+are not simulated by the single-attack calculator. Set critical hits and battle
+state explicitly where applicable.

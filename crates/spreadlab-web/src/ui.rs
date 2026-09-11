@@ -156,7 +156,7 @@ fn topbar(mode: Mode) -> String {
   <div class="brand">
     <div class="brand-mark"><img src="/api/item-sprite/Energy%20Root" alt="SpreadLab"/></div>
     <strong>SpreadLab</strong>
-                <span>Pokémon Champions · VGC 2026 Reg M-B</span>
+                <span>Pokémon Champions · VGC 2026 Reg M-C</span>
   </div>
   <nav class="mode-tabs">
     <a class="{defensive}" href="/survive">Defensive Calculator</a>
