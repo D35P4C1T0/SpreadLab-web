@@ -152,3 +152,13 @@ To use an existing Chromium installation, set `CHROMIUM_PATH=/usr/bin/chromium`.
 `SPREADLAB_SCREENSHOTS=/tmp/spreadlab-screenshots` saves captures at 1440×900,
 1280×800, 1024×768, and 390×844. Tests cover real damage, both optimizer modes,
 keyboard conditions, crit persistence, sets, forms, swapping, and failure states.
+
+The desktop app shell keeps Optimization above the matchup and Field Conditions
+above Results, with a compact left navigation rail. Saved Sets and Metagame open
+searchable local set libraries; Metagame shows bundled presets, not live usage
+rankings. Guides explains the calculator, and Settings selects a persisted dark
+palette. Below 1200px the right workspace follows the matchup; below 900px the
+order is Attacker, Defender, Battle Conditions, Optimization, Results.
+
+Sidebar SVG icons are from [Lucide](https://github.com/lucide-icons/lucide).
+Their ISC license is retained in `crates/spreadlab-web/assets/sidebar-icons/LICENSE`.

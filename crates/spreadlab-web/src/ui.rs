@@ -18,15 +18,16 @@ pub enum ResultBlock {
 pub fn render(mode: Mode, result: Option<ResultBlock>) -> String {
     let body = format!(
         r##"{top}
+{sidebar}
 <form method="post" action="{action}" class="workspace">
   {hidden_sets}
-  <main class="sets-panel">{sets}</main>
-  <div class="shared-controls">{field}<section class="calc-panel" aria-label="Spread optimization">{calc}</section></div>
-  <section id="results" class="results-panel" aria-label="Calculation results" aria-live="polite" aria-busy="false" tabindex="-1">{results}</section>
+  <div class="left-workspace"><section class="calc-panel" aria-label="Spread optimization">{calc}</section><main class="sets-panel">{sets}</main></div>
+  <div class="right-workspace">{field}<section id="results" class="results-panel" aria-label="Calculation results" aria-live="polite" aria-busy="false" tabindex="-1">{results}</section></div>
   <a class="mobile-result-link" href="#results">View results <span data-mobile-result>Ready</span></a>
 </form>
 {early_restore}"##,
         top = topbar(mode),
+        sidebar = sidebar(),
         action = mode.action(),
         hidden_sets = hidden_sets(mode),
         calc = calculation_panel(mode),
@@ -139,9 +140,9 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260911-1"/>
+        <link rel="stylesheet" href="/assets/app.css?v=20260911-2"/>
         <script src="/assets/setdex_ncp-g10.js?v=20260711-5"></script>
-        <script defer src="/assets/app.js?v=20260911-1"></script>
+        <script defer src="/assets/app.js?v=20260911-2"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -163,7 +164,31 @@ fn topbar(mode: Mode) -> String {
     <a class="{defensive}" href="/survive">Defensive Calculator</a>
     <a class="{offensive}" href="/ko">Offensive Calculator</a>
   </nav>
+  <button type="button" class="settings-action" data-open-dialog="settings" aria-label="Display settings">⚙ <span>Settings</span></button>
 </header>"#
+    )
+}
+
+fn sidebar() -> String {
+    format!(
+        r##"<aside class="app-sidebar" aria-label="Application navigation">
+  <nav>
+    <a class="active" href="#" aria-current="page" title="Calculator"><span class="nav-icon" aria-hidden="true">{calculator_icon}</span><span>Calculator</span></a>
+    <button type="button" data-open-dialog="saved" title="Saved Sets"><span class="nav-icon" aria-hidden="true">{saved_icon}</span><span>Saved Sets</span></button>
+    <button type="button" data-open-dialog="metagame" title="Metagame presets"><span class="nav-icon" aria-hidden="true">{metagame_icon}</span><span>Metagame</span></button>
+    <button type="button" data-open-dialog="guides" title="Guides"><span class="nav-icon" aria-hidden="true">{guides_icon}</span><span>Guides</span></button>
+  </nav>
+  <small><span class="sidebar-context">SpreadLab </span>v{version}<span class="sidebar-context"><br/>Champions · Reg M-C</span></small>
+</aside>
+<dialog id="shell-dialog" aria-labelledby="shell-dialog-title">
+  <div class="dialog-heading"><h2 id="shell-dialog-title"></h2><button type="button" data-close-dialog aria-label="Close dialog"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div data-dialog-content></div>
+</dialog>"##,
+        version = env!("CARGO_PKG_VERSION"),
+        calculator_icon = include_str!("../assets/sidebar-icons/calculator.svg"),
+        saved_icon = include_str!("../assets/sidebar-icons/clipboard-list.svg"),
+        metagame_icon = include_str!("../assets/sidebar-icons/chart-no-axes-combined.svg"),
+        guides_icon = include_str!("../assets/sidebar-icons/book-open.svg"),
     )
 }
 
@@ -174,12 +199,12 @@ fn calculation_panel(mode: Mode) -> String {
         r#"<label class="hit-goal">KO target<select name="hit_goal"><option value="1" selected>OHKO</option><option value="2">2HKO</option><option value="3">3HKO</option></select></label>"#
     };
     format!(
-        r#"<div class="section-title"><div><b>Spread optimization</b><small>Updates automatically</small></div></div>
+        r#"<div class="section-title"><span class="step-index">1</span><div><b>Optimization</b><small>Find the optimal spread · updates automatically</small></div></div>
 <input name="move_name" type="hidden" value="Iron Head"/>
 {hit_goal}
 {effect_controls}
 {chance_controls}
-<button class="primary" type="submit">Optimize</button>"#,
+<button class="primary" type="submit">Recalculate</button>"#,
         hit_goal = hit_goal,
         effect_controls = effect_controls(mode),
         chance_controls = chance_controls(mode),
@@ -194,20 +219,20 @@ fn pokemon_sets(mode: Mode) -> String {
     };
     format!(
         r#"<section class="panel sets">
-  <div class="section-title sets-title"><div><b>Matchup</b><small>Choose your Pokémon and benchmark move</small></div><button class="swap-action" type="button" aria-label="Swap attacker and defender"><span>⇄</span> Swap sides</button></div>
+  <div class="section-title sets-title"><div><b>Matchup</b></div><button class="swap-action" type="button" aria-label="Swap attacker and defender"><span>⇄</span> Swap sides</button></div>
   <div class="card-grid">
     <article class="poke-card {attacker_optimized}" data-set-card="attacker">
-      <div class="card-head"><div><b class="side-kicker">Attacker</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
+      <div class="card-head"><div><b class="side-kicker"><span class="side-icon" aria-hidden="true">⚔</span> Attacker</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
       <div class="slot pokemon-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="attacker"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Attacker Pokemon"><span class="select2-chosen" data-pokemon-choice="attacker">Kingambit</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="attacker"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="attacker" value="Kingambit" autocomplete="off" role="combobox" aria-label="Search Attacker Pokemon"/></div><div class="pokemon-options" data-pokemon-options="attacker" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="attacker" aria-label="Attacker form"></select></label></div>
-      <div class="identity-controls">{set_library}</div>
       <div class="poke-row">
         <div class="sprite"><img data-sprite-name="Kingambit" src="/api/sprite/Kingambit" alt="Kingambit sprite"/></div>
         <div>
           <h2 data-field="name">Kingambit</h2>
           <div data-field="types"><span class="pokemon-type-icon" title="Dark" aria-label="Dark type"><img src="/assets/type-icons/dark.svg" alt="" aria-hidden="true"/><span class="sr-only">Dark</span></span><span class="pokemon-type-icon" title="Steel" aria-label="Steel type"><img src="/assets/type-icons/steel.svg" alt="" aria-hidden="true"/><span class="sr-only">Steel</span></span></div>
-          <p class="ability-line"><span data-field="ability">Defiant</span><label class="ability-toggle"><input type="checkbox" data-ability-toggle="attacker" aria-label="attacker ability active" checked/>Active</label></p><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Black Glasses" src="/api/item-sprite/Black%20Glasses" alt="Black Glasses"/><span data-field="item" class="sr-only">Black Glasses</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="attacker"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Attacker Item"><span class="select2-chosen" data-item-choice="attacker">Black Glasses</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="attacker"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="attacker" value="Black Glasses" autocomplete="off" role="combobox" aria-label="Search Attacker Item"/></span><span class="pokemon-options" data-item-options="attacker" role="listbox"></span></span></span></p>
+
         </div>
       </div>
+      <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Defiant</span><select data-ability-select="attacker" aria-label="attacker ability"><option>Defiant</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="attacker" aria-label="attacker ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Black Glasses" src="/api/item-sprite/Black%20Glasses" alt="Black Glasses"/><span data-field="item" class="sr-only">Black Glasses</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="attacker"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Attacker Item"><span class="select2-chosen" data-item-choice="attacker">Black Glasses</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="attacker"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="attacker" value="Black Glasses" autocomplete="off" role="combobox" aria-label="Search Attacker Item"/></span><span class="pokemon-options" data-item-options="attacker" role="listbox"></span></span></span></p></div></div>
       <label class="status">Status {status_attacker}</label>
       <label class="nature">Nature {nature_attacker}</label>
       <textarea class="raw-editor" aria-label="Attacker Showdown set" data-hidden-target="attacker_set">{attacker}</textarea>
@@ -220,24 +245,28 @@ fn pokemon_sets(mode: Mode) -> String {
         <div class="move" data-move="Sucker Punch"><button class="move-select" type="button">Sucker Punch <span>Dark</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Sucker Punch"/>Crit</label><button class="move-delete" type="button" data-delete-move="Sucker Punch" aria-label="Delete Sucker Punch">&#128465;&#xfe0e;</button></div>
         <div class="move" data-move="Swords Dance"><button class="move-select" type="button">Swords Dance <span>Normal</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Swords Dance"/>Crit</label><button class="move-delete" type="button" data-delete-move="Swords Dance" aria-label="Delete Swords Dance">&#128465;&#xfe0e;</button></div>
       </div>
+      <footer class="card-footer">{set_library}</footer>
     </article>
     <article class="poke-card {defender_optimized}" data-set-card="defender">
-      <div class="card-head"><div><b class="side-kicker">{defender_label}</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
+      <div class="card-head"><div><b class="side-kicker"><svg class="side-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/></svg> {defender_label}</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
       <div class="slot defender-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="defender"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Defender Pokemon"><span class="select2-chosen" data-pokemon-choice="defender">Floette</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="defender"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="defender" value="Floette" autocomplete="off" role="combobox" aria-label="Search Defender Pokemon"/></div><div class="pokemon-options" data-pokemon-options="defender" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="defender" aria-label="Defender form"></select></label></div>
-      <div class="identity-controls"><label>HP %<input name="hp_percent" type="number" value="100"/></label>{set_library}</div>
       <div class="poke-row">
         <div class="sprite"><img data-sprite-name="Floette-Mega" src="/api/sprite/Floette-Mega" alt="Floette-Mega sprite"/></div>
         <div>
           <h2 data-field="name">Floette-Mega</h2>
           <div data-field="types"><span class="pokemon-type-icon" title="Fairy" aria-label="Fairy type"><img src="/assets/type-icons/fairy.svg" alt="" aria-hidden="true"/><span class="sr-only">Fairy</span></span></div>
-          <p class="ability-line"><span data-field="ability">Fairy Aura</span><label class="ability-toggle"><input type="checkbox" data-ability-toggle="defender" aria-label="defender ability active" checked/>Active</label></p><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Floettite" src="/api/item-sprite/Floettite" alt="Floettite"/><span data-field="item" class="sr-only">Floettite</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="defender"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Defender Item"><span class="select2-chosen" data-item-choice="defender">Floettite</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="defender"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="defender" value="Floettite" autocomplete="off" role="combobox" aria-label="Search Defender Item"/></span><span class="pokemon-options" data-item-options="defender" role="listbox"></span></span></span></p>
+
         </div>
       </div>
+      <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Fairy Aura</span><select data-ability-select="defender" aria-label="defender ability"><option>Fairy Aura</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="defender" aria-label="defender ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Floettite" src="/api/item-sprite/Floettite" alt="Floettite"/><span data-field="item" class="sr-only">Floettite</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="defender"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Defender Item"><span class="select2-chosen" data-item-choice="defender">Floettite</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="defender"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="defender" value="Floettite" autocomplete="off" role="combobox" aria-label="Search Defender Item"/></span><span class="pokemon-options" data-item-options="defender" role="listbox"></span></span></span></p></div></div>
       <label class="status">Status {status_defender}</label>
       <label class="nature">Nature {nature_defender}</label>
       <textarea class="raw-editor" aria-label="Defender Showdown set" data-hidden-target="defender_set">{defender}</textarea>
       {defender_sp_row}
       {defender_boost_row}
+
+      <div class="defender-note"><span aria-hidden="true">♢</span><span>No moves needed for defender</span><label>Current HP %<input name="hp_percent" type="number" value="100"/></label></div>
+      <footer class="card-footer">{set_library}</footer>
     </article>
   </div>
 </section>"#,
@@ -287,17 +316,10 @@ fn set_library_controls() -> &'static str {
 
 fn field_panel() -> &'static str {
     r#"<section class="panel field" aria-label="Battle conditions">
-  <div class="section-title"><b>Battle conditions</b></div>
+  <div class="section-title"><b><span aria-hidden="true">☷</span> Field &amp; Battle Conditions</b></div>
   <div class="field-group"><span class="field-label" id="format-label">Format</span><div class="choice-row format" role="group" aria-labelledby="format-label" data-toggle-group>
     <label><input type="radio" name="format" value="Singles"/>Singles</label>
     <label><input type="radio" name="format" value="Doubles" checked/>Doubles</label>
-  </div></div>
-  <div class="field-group"><span class="field-label" id="terrain-label">Terrain</span><div class="choice-row five" role="group" aria-labelledby="terrain-label" data-toggle-group>
-    <label><input type="radio" name="terrain" value="None" checked/>None</label>
-    <label><input type="radio" name="terrain" value="Electric"/>Electric</label>
-    <label><input type="radio" name="terrain" value="Grassy"/>Grassy</label>
-    <label><input type="radio" name="terrain" value="Misty"/>Misty</label>
-    <label><input type="radio" name="terrain" value="Psychic"/>Psychic</label>
   </div></div>
   <div class="field-group"><span class="field-label" id="weather-label">Weather</span><div class="choice-row five" role="group" aria-labelledby="weather-label" data-toggle-group>
     <label><input type="radio" name="weather" value="None" checked/>None</label>
@@ -305,6 +327,13 @@ fn field_panel() -> &'static str {
     <label><input type="radio" name="weather" value="Rain"/>Rain</label>
     <label><input type="radio" name="weather" value="Sand"/>Sand</label>
     <label><input type="radio" name="weather" value="Snow"/>Snow</label>
+  </div></div>
+  <div class="field-group"><span class="field-label" id="terrain-label">Terrain</span><div class="choice-row five" role="group" aria-labelledby="terrain-label" data-toggle-group>
+    <label><input type="radio" name="terrain" value="None" checked/>None</label>
+    <label><input type="radio" name="terrain" value="Electric"/>Electric</label>
+    <label><input type="radio" name="terrain" value="Grassy"/>Grassy</label>
+    <label><input type="radio" name="terrain" value="Misty"/>Misty</label>
+    <label><input type="radio" name="terrain" value="Psychic"/>Psychic</label>
   </div></div>
   <div class="field-group effects-group"><span class="field-label" id="effects-label">Effects</span><div class="conditions" role="group" aria-labelledby="effects-label" data-toggle-group>
     <label><input name="fairy_aura" type="checkbox" value="true"/>Fairy Aura</label>
@@ -399,7 +428,6 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         );
     }
     let mut html = String::new();
-    html.push_str(&best_spread_card(&best, mode));
     if let Some(result) = best.get("result").or_else(|| best.get("combined")) {
         html.push_str(&damage_card(
             result,
@@ -408,6 +436,7 @@ fn render_json_result(mode: Mode, json: &str) -> String {
             best.get("rolls").or_else(|| result.get("rolls")),
         ));
     }
+    html.push_str(&best_spread_card(&best, mode));
     html.push_str(&matches_table(&matches));
     result_shell(
         "Results",

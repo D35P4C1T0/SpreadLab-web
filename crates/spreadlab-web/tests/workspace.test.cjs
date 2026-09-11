@@ -29,7 +29,7 @@ async function recalculate(page, action, endpoint = '/api/survive') {
   return result.json();
 }
 
-for (const [width, height] of [[1440, 900], [1280, 800], [1024, 768], [390, 844]]) {
+for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768], [390, 844]]) {
   test(`workspace geometry and real damage at ${width}×${height}`, async () => {
     const page = await browser.newPage({ viewport: { width, height } });
     page.setDefaultTimeout(10000);
@@ -44,19 +44,25 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 768], [390, 844]
     if (width >= 1200) {
       assert.equal(attacker.y, defender.y);
       assert.ok(results.x > defender.x);
-      assert.equal(await page.locator('.results-panel').evaluate(node => getComputedStyle(node).position), 'sticky');
+      const optimization = await page.locator('.calc-panel').boundingBox();
+      const field = await page.locator('.field').boundingBox();
+      assert.ok(optimization.y < attacker.y);
+      assert.ok(field.y < results.y);
+      assert.equal(field.x, results.x);
+      assert.equal(await page.locator('.app-sidebar').isVisible(), true);
     } else {
       assert.ok(results.y > defender.y + defender.height);
       if (width >= 900) assert.equal(attacker.y, defender.y);
       else assert.ok(defender.y >= attacker.y + attacker.height);
     }
-    assert.match(await page.locator('.damage-grid').innerText(), /134–158 HP/);
+    assert.match(await page.locator('.damage-grid').innerText(), /134–158/);
     assert.match(await page.locator('.damage-title').innerText(), /Iron Head[\s\S]*Floette-Mega/);
     assert.deepEqual(await page.locator('[data-optimized-sp]').allTextContents(), ['4', '0', '32', '0', '0', '0']);
     await page.locator('.damage-rolls summary').click();
     assert.equal((await page.locator('.damage-rolls code').innerText()).split(',').length, 16);
     if (screenshots) {
       fs.mkdirSync(screenshots, { recursive: true });
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(screenshots, `workspace-${width}.png`), fullPage: true });
     }
     await page.close();
@@ -167,5 +173,36 @@ test('loading, no-match, and error presentation do not claim success', async () 
   await page.waitForSelector('.error-card');
   assert.match(await page.locator('.error-card').innerText(), /Test validation error/);
   assert.equal(await page.locator('[data-mobile-result]').innerText(), 'Calculation failed');
+  await page.close();
+});
+
+test('app navigation, palette, saved library, and ability selector work', async () => {
+  const page = await browser.newPage({ viewport: { width: 1536, height: 960 } });
+  await ready(page);
+  await page.locator('[data-open-dialog="settings"]').click();
+  await page.locator('[data-theme-picker]').selectOption('slate');
+  assert.equal(await page.locator('html').getAttribute('data-theme'), 'slate');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#shell-dialog').isVisible(), false);
+  await page.locator('[data-open-dialog="guides"]').click();
+  assert.match(await page.locator('#shell-dialog').innerText(), /Defensive mode/);
+  await page.locator('[data-close-dialog]').click();
+  const attacker = page.locator('[data-set-card="attacker"]');
+  await attacker.locator('[data-ability-select]').selectOption('Pressure');
+  assert.match(await attacker.locator('.raw-editor').inputValue(), /Ability: Pressure/);
+  await attacker.locator('[data-save-set]').click();
+  await attacker.locator('[data-save-set-name]').fill('Sidebar set');
+  await attacker.locator('[data-confirm-save]').click();
+  await page.locator('[data-open-dialog="saved"]').click();
+  await page.locator('[data-library-side]').selectOption('defender');
+  await page.locator('[data-library-set]').filter({ hasText: 'Sidebar set' }).click();
+  assert.match(await page.locator('[data-set-card="defender"] .raw-editor').inputValue(), /Kingambit/);
+  await page.locator('[data-open-dialog="metagame"]').click();
+  await page.locator('[data-library-search]').fill('Venusaur');
+  assert.ok(await page.locator('[data-library-set]').count() > 0);
+  await page.locator('[data-library-set]').first().click();
+  assert.match(await attacker.locator('.raw-editor').inputValue(), /Venusaur/);
+  await page.reload();
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'slate');
   await page.close();
 });

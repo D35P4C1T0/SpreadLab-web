@@ -273,6 +273,7 @@ function renderCard(card, parsed) {
   const baseName = baseSpeciesName(parsed.name);
   if (choice) choice.replaceChildren(document.createTextNode(baseName));
   syncFormSelector(card, parsed.name);
+  syncAbilitySelector(card, parsed);
   const itemSelector = card.querySelector("[data-item-selector]");
   if (itemSelector && document.activeElement !== itemSelector) itemSelector.value = parsed.item;
   const itemChoice = card.querySelector("[data-item-choice]");
@@ -499,8 +500,7 @@ function renderTypes(card, name) {
 
 function pokemonTypeIcon(type) {
   const safeType = String(type || "Unknown");
-  const icon = safeType === "Unknown" ? "" : `<img src="/assets/type-icons/${escapeAttr(safeType.toLowerCase())}.svg" alt="" aria-hidden="true"/>`;
-  return `<span class="pokemon-type-icon" data-type="${escapeAttr(safeType)}" title="${escapeAttr(safeType)}" aria-label="${escapeAttr(safeType)} type">${icon}<span class="sr-only">${escapeHtml(safeType)}</span></span>`;
+  return `<span class="pokemon-type-icon ${typeClass(safeType)}" data-type="${escapeAttr(safeType)}" title="${escapeAttr(safeType)}" aria-label="${escapeAttr(safeType)} type">${escapeHtml(safeType)}</span>`;
 }
 
 function moveType(move) {
@@ -1629,7 +1629,7 @@ function renderResults(data) {
   const best = data.best || matches[0] || null;
   const count = matches.length;
   const bestLabel = best?.sp_line || "No match";
-  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {}, best.rolls)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
+  const body = best ? `${warningsCard(data.warnings)}${damageCard(best.result || best.combined || {}, best.rolls, true)}${bestCard(best)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
   return resultShell("Results", `${count} matching spreads`, bestLabel, body);
 }
 
@@ -1649,10 +1649,10 @@ function spreadSummary(line) {
 
 function bestCard(best) {
   const stats = best.final_stats || {};
-  return `<article class="best-card" data-tab-panel="best"><div class="best-heading"><h2>Best spread</h2><span class="result-status">✓ Target met</span></div><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "–")}</b></div><div class="spread-big">${escapeHtml(spreadSummary(best.sp_line))}<small>${best.total_points ?? "–"} / 66 SP used</small></div><div><small>KO chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b></div></div>${finalStats(stats)}</article>`;
+  return `<article class="best-card" data-tab-panel="best"><div class="best-heading"><h2>Best spread</h2><span class="result-status">✓ Target met</span></div><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "–")}</b></div><div class="spread-big">${escapeHtml(spreadSummary(best.sp_line))}<small>${best.total_points ?? "–"} / 66 SP used</small></div><div><small>KO chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b></div></div>${location.pathname.includes("ko") ? "" : `<p class="target-hp">Target HP: <b>${stats.hp ?? "–"}</b></p>`}${finalStats(stats)}</article>`;
 }
 
-function damageCard(summary, rolls = summary.rolls || []) {
+function damageCard(summary, rolls = summary.rolls || [], optimized = false) {
   const pmax = Math.max(0, Math.min(100, Number(summary.percent_max || 0)));
   const pmin = Math.max(0, Math.min(100, Number(summary.percent_min || 0)));
   const move = document.querySelector('[name="move_name"]')?.value || "Selected move";
@@ -1660,7 +1660,7 @@ function damageCard(summary, rolls = summary.rolls || []) {
   const damageRolls = Array.isArray(rolls) && rolls.length
     ? `<details class="damage-rolls"><summary>${rolls.length} damage rolls</summary><code>${rolls.map((roll) => escapeHtml(roll)).join(", ")}</code></details>`
     : "";
-  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title"><b>${escapeHtml(move)}</b><span class="matchup-arrow" aria-label="against">→</span><b>${escapeHtml(defender)}</b></div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
+  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title"><div><b>${escapeHtml(move)}</b> <span class="type-badge ${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><small>vs. ${escapeHtml(defender)}</small></div>${optimized ? '<span class="result-status">Best spread</span>' : ""}</div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
 }
 
 function matchesTable(matches) {
@@ -1690,6 +1690,72 @@ function updateResultPresentation(data) {
       cell.classList.toggle("is-modified", value !== 0);
     });
   }
+}
+
+function syncAbilitySelector(card, parsed) {
+  const select = card.querySelector("[data-ability-select]");
+  if (!select) return;
+  const available = speciesAbilities[normalizeName(parsed.name)] || speciesAbilities[normalizeName(megaAlias(parsed.name))] || [];
+  const names = [...new Set([...available, parsed.ability].filter(Boolean))];
+  select.innerHTML = names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
+  select.value = parsed.ability;
+}
+
+function initAppShell() {
+  document.querySelectorAll("[data-ability-select]").forEach(select => {
+    select.addEventListener("change", () => {
+      const card = select.closest("[data-set-card]");
+      const editor = card.querySelector(".raw-editor");
+      editor.value = replaceOrInsertLine(editor.value, /^Ability:/i, `Ability: ${select.value}`);
+      delete card.dataset.activeSavedSet;
+      syncRawEditor(editor);
+      refreshSetLibrary(card);
+      saveState();
+      autoRun();
+    });
+  });
+  try { document.documentElement.dataset.theme = localStorage.getItem("spreadlab.theme") || "midnight"; } catch (_) {}
+  const dialog = document.querySelector("#shell-dialog");
+  document.querySelectorAll("[data-open-dialog]").forEach(button => button.addEventListener("click", () => {
+    const kind = button.dataset.openDialog;
+    const title = dialog.querySelector("h2");
+    const content = dialog.querySelector("[data-dialog-content]");
+    if (kind === "settings") {
+      title.textContent = "Display settings";
+      content.innerHTML = `<label>Dark palette<select data-theme-picker><option value="midnight">Midnight</option><option value="slate">Slate</option></select></label><p class="dialog-hint">Saved on this device.</p>`;
+      const picker = content.querySelector("select");
+      picker.value = document.documentElement.dataset.theme || "midnight";
+      picker.addEventListener("change", () => {
+        document.documentElement.dataset.theme = picker.value;
+        try { localStorage.setItem("spreadlab.theme", picker.value); } catch (_) {}
+      });
+    } else if (kind === "guides") {
+      title.textContent = "Calculator guide";
+      content.innerHTML = `<div class="guide-copy"><h3>Build a matchup</h3><p>Choose Pokémon or a preset from each selector. Paste / edit set accepts Showdown text. Pick an attacking move and set its critical-hit toggle when needed.</p><h3>Find a spread</h3><p>Defensive mode minimizes investment while staying below your KO chance limit. Offensive mode finds the investment needed to reach your minimum KO chance. Nature “Any” lets the optimizer choose.</p><h3>Read the result</h3><p>Damage shows the HP range for the selected matchup. For 2HKO or 3HKO targets, the summary evaluates the combined sequence. Expand damage rolls to inspect individual rolls. Optimized SPs are a result preview, not editable locks.</p><h3>Battle state</h3><p>Active abilities can set terrain, weather, and boosts. Review conditions after changing Pokémon. All changes recalculate automatically.</p></div>`;
+    } else {
+      title.textContent = kind === "saved" ? "Saved sets" : "Metagame presets";
+      const sets = kind === "saved" ? savedSets : builtInSets;
+      content.innerHTML = `<p class="dialog-hint">${kind === "saved" ? "Your sets saved on this device." : "Bundled competitive presets; not live usage rankings."}</p><div class="library-filters"><label>Search<input data-library-search type="search" placeholder="Pokémon or set name"/></label><label>Load into<select data-library-side><option value="attacker">Attacker</option><option value="defender">Defender</option></select></label></div><div class="library-list" data-library-list></div>`;
+      const render = () => {
+        const query = normalizeName(content.querySelector("[data-library-search]").value);
+        const matches = sets.filter(set => normalizeName(`${set.pokemon} ${set.name}`).includes(query));
+        content.querySelector("[data-library-list]").innerHTML = matches.length ? matches.map(set => `<button type="button" data-library-set="${escapeAttr(set.id)}"><b>${escapeHtml(set.pokemon)}</b><span>${escapeHtml(set.name)}</span></button>`).join("") : `<p class="dialog-hint">${kind === "saved" && !sets.length ? "No saved sets yet. Use Save set below either Pokémon." : "No matching sets."}</p>`;
+      };
+      content.querySelector("[data-library-search]").addEventListener("input", render);
+      content.querySelector("[data-library-list]").addEventListener("click", event => {
+        const button = event.target.closest("[data-library-set]");
+        const set = sets.find(set => set.id === button?.dataset.librarySet);
+        if (!set) return;
+        const side = content.querySelector("[data-library-side]").value;
+        applyPokemonSelection(side, baseSpeciesName(canonicalSpeciesName(set.pokemon)), set.id);
+        dialog.close();
+        document.querySelector(`[data-set-card="${side}"] .pokemon-choice`)?.focus();
+      });
+      render();
+    }
+    dialog.showModal();
+  }));
+  dialog.querySelector("[data-close-dialog]").addEventListener("click", () => dialog.close());
 }
 
 function syncStatPresentation() {
@@ -1915,6 +1981,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initShare();
   initRun();
   initSetLibraries();
+  initAppShell();
   initToggles();
   initPersistentInputs();
   initPokemonSelectors();
