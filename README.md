@@ -17,7 +17,7 @@ The app is an Axum server with server-rendered Rust UI and a small client-side s
 - Field controls for format, terrain, weather, screens, Helping Hand, Protect, Gravity, Fairy Aura, and Friend Guard.
 - Ability-aware field adaptation for effects like Fairy Aura, weather/terrain setters, Intimidate, Defiant, Competitive, Contrary, Guard Dog, Mirror Armor, and related Intimidate immunities.
 - Browser persistence via `localStorage`.
-- Pokémon and item sprite proxy/cache with local fallbacks.
+- Static Pokémon sprites from Pokémon Showdown’s `gen5` collection, with PokéAPI and local fallbacks; item sprite proxy/cache.
 - Champions Gen 10 preset selector, vendored from NCP VGC Damage Calculator.
 
 The preset data in `crates/spreadlab-web/assets/setdex_ncp-g10.js` is distributed

@@ -174,7 +174,7 @@ async fn dev_asset_versions(paths: &[&str]) -> Vec<Option<(std::time::SystemTime
 
 async fn api_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebError> {
     let slug = showdown_sprite_slug(&name);
-    let path = PathBuf::from("crates/spreadlab-web/assets/sprites-static/showdown")
+    let path = PathBuf::from("crates/spreadlab-web/assets/sprites-static/showdown-gen5")
         .join(format!("{slug}.img"));
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -211,7 +211,7 @@ const MISSINGNO_GEN3: &[u8] = include_bytes!("../assets/fallbacks/missingno-gen3
 
 async fn fetch_showdown_sprite(slug: &str) -> Option<Vec<u8>> {
     let response = reqwest::get(format!(
-        "https://play.pokemonshowdown.com/sprites/ani/{slug}.gif"
+        "https://play.pokemonshowdown.com/sprites/gen5/{slug}.png"
     ))
     .await
     .ok()?;

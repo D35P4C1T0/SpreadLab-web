@@ -206,3 +206,58 @@ test('app navigation, palette, saved library, and ability selector work', async 
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'slate');
   await page.close();
 });
+
+test('stat modifier clicks update nature on editable and optimized sides', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await ready(page);
+  for (const side of ['attacker', 'defender']) {
+    const card = page.locator(`[data-set-card="${side}"]`);
+    const nature = card.locator('[data-card-nature]');
+    const stat = key => card.locator(`[data-sp-row] [data-sp-key="${key}"], [data-optimized-sp="${key}"]`);
+    await nature.selectOption('Adamant');
+    await stat('spe').click({ modifiers: ['Control'] });
+    assert.equal(await nature.inputValue(), 'Jolly');
+    await stat('def').click({ modifiers: ['Alt'] });
+    assert.equal(await nature.inputValue(), 'Hasty');
+    assert.match(await card.locator('.raw-editor').inputValue(), /Hasty Nature/);
+    await stat('def').click({ modifiers: ['Control'] });
+    assert.equal(await nature.inputValue(), 'Relaxed');
+    await stat('hp').click({ modifiers: ['Alt'] });
+    assert.equal(await nature.inputValue(), 'Relaxed');
+    await stat('atk').click();
+    assert.equal(await nature.inputValue(), 'Relaxed');
+    await nature.selectOption('Hardy');
+    await stat('spa').click({ modifiers: ['Control'] });
+    assert.equal(await nature.inputValue(), 'Modest');
+    assert.equal(await stat('spa').evaluate(node => node.classList.contains('nature-boost')), true);
+    assert.equal(await stat('atk').evaluate(node => node.classList.contains('nature-nerf')), true);
+  }
+  const payload = await page.evaluate(() => currentPayload());
+  assert.match(payload.body.attacker_set, /Modest Nature/);
+  assert.equal(payload.body.nature, 'Modest');
+  await page.reload();
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-card-nature]')].every(node => node.value === 'Modest'));
+  await page.close();
+});
+
+
+test('species search excludes unrelated presets with fuzzy title matches', async () => {
+  const page = await browser.newPage();
+  await ready(page);
+  const card = page.locator('[data-set-card="attacker"]');
+  await card.locator('[data-pokemon-choice]').click();
+  const search = card.locator('[data-pokemon-selector]');
+  for (const query of ['Lucario', 'luca']) {
+    await search.fill(query);
+    const options = card.locator('[data-pokemon-option]');
+    await page.waitForFunction(() => {
+      const options = [...document.querySelectorAll('[data-set-card="attacker"] [data-pokemon-option]')];
+      return options.length > 0 && options.every(node => node.dataset.pokemonName === 'Lucario');
+    });
+    assert.ok(await options.count() > 1, 'species and its presets remain available');
+    assert.equal(await options.filter({ hasText: 'Yurine' }).count(), 0);
+  }
+  await search.fill('Yurine');
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-set-card="attacker"] [data-pokemon-option]')].some(node => node.dataset.pokemonName === 'Talonflame'));
+  await page.close();
+});

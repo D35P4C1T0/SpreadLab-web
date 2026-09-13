@@ -302,10 +302,10 @@ function renderCard(card, parsed) {
     img.onerror = () => {
       if (img.dataset.fallbackApplied) return;
       img.dataset.fallbackApplied = "true";
-      img.src = "/api/sprite/__missingno";
+      img.src = "/api/sprite/__missingno?v=static-1";
     };
     delete img.dataset.fallbackApplied;
-    img.src = `/api/sprite/${encodeURIComponent(parsed.name)}`;
+    img.src = `/api/sprite/${encodeURIComponent(parsed.name)}?v=static-1`;
   }
 
   const moves = card.querySelector('[data-field="moves"]');
@@ -551,9 +551,10 @@ function syncRawEditorValue(editor) {
 function applyNatureClasses(card) {
   const nature = card.querySelector("[data-card-nature]")?.value || "Hardy";
   const [boost, nerf] = natureEffects[nature] || [];
-  card.querySelectorAll("[data-sp-key]").forEach((input) => {
-    input.classList.toggle("nature-boost", input.dataset.spKey === boost);
-    input.classList.toggle("nature-nerf", input.dataset.spKey === nerf);
+  card.querySelectorAll("[data-sp-key], [data-optimized-sp]").forEach((input) => {
+    const stat = input.dataset.spKey || input.dataset.optimizedSp;
+    input.classList.toggle("nature-boost", stat === boost);
+    input.classList.toggle("nature-nerf", stat === nerf);
   });
 }
 
@@ -632,7 +633,41 @@ function initAbilityToggles() {
   });
 }
 
+function natureForStat(current, stat, lower) {
+  if (!statOrder.some(([key]) => key === stat) || stat === "hp") return current;
+  const [boost, nerf] = natureEffects[current] || [];
+  const previous = lower ? nerf : boost;
+  let opposite = lower ? boost : nerf;
+  if (!opposite || opposite === stat) {
+    opposite = previous && previous !== stat ? previous : (stat === "atk" ? "spa" : "atk");
+  }
+  return Object.keys(natureEffects).find((nature) => {
+    const pair = natureEffects[nature];
+    return pair[lower ? 1 : 0] === stat && pair[lower ? 0 : 1] === opposite;
+  }) || current;
+}
+
 function initNatures() {
+  document.querySelectorAll("[data-sp-row], .preview-stats").forEach((row) => {
+    row.title = "Ctrl+Click: boost stat · Alt+Click: lower stat · HP is unaffected by nature";
+    // macOS converts Control-click into a context menu; handle its press too.
+    row.addEventListener("contextmenu", (event) => {
+      if (event.ctrlKey) event.preventDefault();
+    });
+    row.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || event.ctrlKey === event.altKey) return;
+      const cell = event.target.closest("[data-sp-key], .preview-stats > span");
+      const stat = cell?.dataset.spKey || cell?.querySelector("[data-optimized-sp]")?.dataset.optimizedSp;
+      if (!stat) return;
+      event.preventDefault();
+      const select = row.closest("[data-set-card]")?.querySelector("[data-card-nature]");
+      if (!select) return;
+      const nature = natureForStat(select.value, stat, event.altKey);
+      if (nature === select.value) return;
+      select.value = nature;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
   document.querySelectorAll("[data-card-nature]").forEach((select) => {
     select.addEventListener("change", () => {
       const card = select.closest("[data-set-card]");
@@ -1086,7 +1121,19 @@ function setActivePokemonOption(options, index) {
 }
 
 function fuzzyPokemonMatches(query, limit) {
-  return fuzzyMatches(pokemonOptionSearchList, query, limit);
+  const key = normalizeName(query);
+  const speciesMatches = pokemonSearchList.filter((entry) => key && entry.key.includes(key));
+  if (speciesMatches.length) {
+    const species = new Set(speciesMatches.map((entry) => entry.name));
+    return fuzzyMatches(pokemonOptionSearchList.filter((entry) => species.has(entry.pokemon)), query, limit);
+  }
+  // Fuzzy matching is useful for species, but long preset titles produce
+  // unrelated subsequence matches. Search those titles by literal text only.
+  const candidates = pokemonOptionSearchList.map((entry) => ({
+    ...entry,
+    key: key && entry.key.includes(key) ? entry.key : normalizeName(entry.pokemon),
+  }));
+  return fuzzyMatches(candidates, query, limit);
 }
 
 function fuzzyItemMatches(query, limit) {
@@ -1649,7 +1696,7 @@ function spreadSummary(line) {
 
 function bestCard(best) {
   const stats = best.final_stats || {};
-  return `<article class="best-card" data-tab-panel="best"><div class="best-heading"><h2>Best spread</h2><span class="result-status">✓ Target met</span></div><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "–")}</b></div><div class="spread-big">${escapeHtml(spreadSummary(best.sp_line))}<small>${best.total_points ?? "–"} / 66 SP used</small></div><div><small>KO chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b></div></div>${location.pathname.includes("ko") ? "" : `<p class="target-hp">Target HP: <b>${stats.hp ?? "–"}</b></p>`}${finalStats(stats)}</article>`;
+  return `<article class="best-card" data-tab-panel="best" aria-label="Optimized spread"><div class="spread-summary"><b>${escapeHtml(best.nature || "–")}</b><span>${escapeHtml(spreadSummary(best.sp_line))}</span><small>${best.total_points ?? "–"} / 66 SP used</small></div>${location.pathname.includes("ko") ? "" : `<p class="target-hp">Target HP: <b>${stats.hp ?? "–"}</b></p>`}${finalStats(stats)}</article>`;
 }
 
 function damageCard(summary, rolls = summary.rolls || [], optimized = false) {

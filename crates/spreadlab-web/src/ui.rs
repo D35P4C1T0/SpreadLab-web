@@ -92,7 +92,7 @@ fn early_restore_script() -> &'static str {
     const sprite = card.querySelector("[data-sprite-name]");
     if (sprite) {
       sprite.dataset.spriteName = parsed.name;
-      sprite.src = `/api/sprite/${encodeURIComponent(parsed.name)}`;
+      sprite.src = `/api/sprite/${encodeURIComponent(parsed.name)}?v=static-1`;
       sprite.alt = `${parsed.name} sprite`;
     }
     const item = card.querySelector("[data-item-sprite]");
@@ -140,9 +140,9 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260911-2"/>
+        <link rel="stylesheet" href="/assets/app.css?v=20260913-2"/>
         <script src="/assets/setdex_ncp-g10.js?v=20260711-5"></script>
-        <script defer src="/assets/app.js?v=20260911-2"></script>
+        <script defer src="/assets/app.js?v=20260913-2"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -223,18 +223,18 @@ fn pokemon_sets(mode: Mode) -> String {
   <div class="card-grid">
     <article class="poke-card {attacker_optimized}" data-set-card="attacker">
       <div class="card-head"><div><b class="side-kicker"><span class="side-icon" aria-hidden="true">⚔</span> Attacker</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
-      <div class="slot pokemon-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="attacker"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Attacker Pokemon"><span class="select2-chosen" data-pokemon-choice="attacker">Kingambit</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="attacker"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="attacker" value="Kingambit" autocomplete="off" role="combobox" aria-label="Search Attacker Pokemon"/></div><div class="pokemon-options" data-pokemon-options="attacker" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="attacker" aria-label="Attacker form"></select></label></div>
+
       <div class="poke-row">
-        <div class="sprite"><img data-sprite-name="Kingambit" src="/api/sprite/Kingambit" alt="Kingambit sprite"/></div>
+        <div class="sprite"><img data-sprite-name="Kingambit" src="/api/sprite/Kingambit?v=static-1" alt="Kingambit sprite"/></div>
         <div>
-          <h2 data-field="name">Kingambit</h2>
+          <div class="slot pokemon-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="attacker"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Attacker Pokemon"><span class="select2-chosen" data-pokemon-choice="attacker">Kingambit</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="attacker"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="attacker" value="Kingambit" autocomplete="off" role="combobox" aria-label="Search Attacker Pokemon"/></div><div class="pokemon-options" data-pokemon-options="attacker" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="attacker" aria-label="Attacker form"></select></label></div>
+          <h2 class="sr-only" data-field="name">Kingambit</h2>
           <div data-field="types"><span class="pokemon-type-icon" title="Dark" aria-label="Dark type"><img src="/assets/type-icons/dark.svg" alt="" aria-hidden="true"/><span class="sr-only">Dark</span></span><span class="pokemon-type-icon" title="Steel" aria-label="Steel type"><img src="/assets/type-icons/steel.svg" alt="" aria-hidden="true"/><span class="sr-only">Steel</span></span></div>
 
         </div>
       </div>
       <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Defiant</span><select data-ability-select="attacker" aria-label="attacker ability"><option>Defiant</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="attacker" aria-label="attacker ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Black Glasses" src="/api/item-sprite/Black%20Glasses" alt="Black Glasses"/><span data-field="item" class="sr-only">Black Glasses</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="attacker"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Attacker Item"><span class="select2-chosen" data-item-choice="attacker">Black Glasses</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="attacker"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="attacker" value="Black Glasses" autocomplete="off" role="combobox" aria-label="Search Attacker Item"/></span><span class="pokemon-options" data-item-options="attacker" role="listbox"></span></span></span></p></div></div>
-      <label class="status">Status {status_attacker}</label>
-      <label class="nature">Nature {nature_attacker}</label>
+      <div class="condition-row"><label class="status">Status {status_attacker}</label><label class="nature">Nature {nature_attacker}</label></div>
       <textarea class="raw-editor" aria-label="Attacker Showdown set" data-hidden-target="attacker_set">{attacker}</textarea>
       {attacker_sp_row}
       {attacker_boost_row}
@@ -249,18 +249,18 @@ fn pokemon_sets(mode: Mode) -> String {
     </article>
     <article class="poke-card {defender_optimized}" data-set-card="defender">
       <div class="card-head"><div><b class="side-kicker"><svg class="side-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/></svg> {defender_label}</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
-      <div class="slot defender-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="defender"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Defender Pokemon"><span class="select2-chosen" data-pokemon-choice="defender">Floette</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="defender"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="defender" value="Floette" autocomplete="off" role="combobox" aria-label="Search Defender Pokemon"/></div><div class="pokemon-options" data-pokemon-options="defender" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="defender" aria-label="Defender form"></select></label></div>
+
       <div class="poke-row">
-        <div class="sprite"><img data-sprite-name="Floette-Mega" src="/api/sprite/Floette-Mega" alt="Floette-Mega sprite"/></div>
+        <div class="sprite"><img data-sprite-name="Floette-Mega" src="/api/sprite/Floette-Mega?v=static-1" alt="Floette-Mega sprite"/></div>
         <div>
-          <h2 data-field="name">Floette-Mega</h2>
+          <div class="slot defender-slot"><div class="pokemon-combobox select2-container" data-pokemon-combobox="defender"><button class="select2-choice pokemon-choice" type="button" aria-expanded="false" aria-label="Defender Pokemon"><span class="select2-chosen" data-pokemon-choice="defender">Floette</span><span class="select2-arrow"><b></b></span></button><div class="pokemon-menu select2-drop" data-pokemon-menu="defender"><div class="select2-search"><input class="pokemon-selector" data-pokemon-selector="defender" value="Floette" autocomplete="off" role="combobox" aria-label="Search Defender Pokemon"/></div><div class="pokemon-options" data-pokemon-options="defender" role="listbox"></div></div></div><label class="form-selector" data-form-control hidden>Form<select data-form-selector="defender" aria-label="Defender form"></select></label></div>
+          <h2 class="sr-only" data-field="name">Floette-Mega</h2>
           <div data-field="types"><span class="pokemon-type-icon" title="Fairy" aria-label="Fairy type"><img src="/assets/type-icons/fairy.svg" alt="" aria-hidden="true"/><span class="sr-only">Fairy</span></span></div>
 
         </div>
       </div>
       <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Fairy Aura</span><select data-ability-select="defender" aria-label="defender ability"><option>Fairy Aura</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="defender" aria-label="defender ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Floettite" src="/api/item-sprite/Floettite" alt="Floettite"/><span data-field="item" class="sr-only">Floettite</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="defender"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Defender Item"><span class="select2-chosen" data-item-choice="defender">Floettite</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="defender"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="defender" value="Floettite" autocomplete="off" role="combobox" aria-label="Search Defender Item"/></span><span class="pokemon-options" data-item-options="defender" role="listbox"></span></span></span></p></div></div>
-      <label class="status">Status {status_defender}</label>
-      <label class="nature">Nature {nature_defender}</label>
+      <div class="condition-row"><label class="status">Status {status_defender}</label><label class="nature">Nature {nature_defender}</label></div>
       <textarea class="raw-editor" aria-label="Defender Showdown set" data-hidden-target="defender_set">{defender}</textarea>
       {defender_sp_row}
       {defender_boost_row}
@@ -467,24 +467,21 @@ fn best_spread_card(best: &Value, _mode: Mode) -> String {
         .get("total_points")
         .and_then(Value::as_u64)
         .unwrap_or(0);
-    let result = best.get("result").or_else(|| best.get("combined"));
-    let ko = result
-        .and_then(|r| r.get("ko_chance"))
-        .and_then(Value::as_f64)
-        .map(percent)
-        .unwrap_or_else(|| "-".to_owned());
     let stats = best.get("final_stats").unwrap_or(&Value::Null);
-    let metric = "KO chance";
     format!(
-        r#"<article class="best-card" data-tab-panel="best">
-  <div class="best-heading"><h2>Best spread</h2><span class="result-status">✓ Target met</span></div>
-  <div class="best-grid">
-    <div><small>Nature</small><b>{nature}</b></div>
-    <div class="spread-big">{sp_line}<small>{total} / 66 SP used</small></div>
-    <div><small>{metric}</small><b>{ko}</b></div>
-  </div>
+        r#"<article class="best-card" data-tab-panel="best" aria-label="Optimized spread">
+  <div class="spread-summary"><b>{nature}</b><span>{sp_line}</span><small>{total} / 66 SP used</small></div>
+  {target_hp}
   {stats}
 </article>"#,
+        target_hp = if _mode == Mode::Ko {
+            String::new()
+        } else {
+            format!(
+                r#"<p class="target-hp">Target HP: <b>{}</b></p>"#,
+                num(stats, "hp")
+            )
+        },
         stats = final_stats(stats),
     )
 }
