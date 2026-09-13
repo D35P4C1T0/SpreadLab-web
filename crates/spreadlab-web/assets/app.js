@@ -38,6 +38,12 @@ let itemSearchList = [];
 const megaStonePokemon = Object.freeze({
   Abomasite: "Mega Abomasnow",
   Absolite: "Mega Absol",
+  "Absolite Z": "Mega Absol Z",
+  "Garchompite Z": "Mega Garchomp Z",
+  "Lucarionite Z": "Mega Lucario Z",
+  Salamencite: "Mega Salamence",
+  Golisopite: "Mega Golisopod",
+  Baxcalibrite: "Mega Baxcalibur",
   Aerodactylite: "Mega Aerodactyl",
   Aggronite: "Mega Aggron",
   Alakazite: "Mega Alakazam",
@@ -45,7 +51,7 @@ const megaStonePokemon = Object.freeze({
   Ampharosite: "Mega Ampharos",
   Audinite: "Mega Audino",
   Banettite: "Mega Banette",
-  Barbaracleite: "Mega Barbaracle",
+  Barbaracite: "Mega Barbaracle",
   Beedrillite: "Mega Beedrill",
   Blastoisinite: "Mega Blastoise",
   Blazikenite: "Mega Blaziken",
@@ -58,7 +64,7 @@ const megaStonePokemon = Object.freeze({
   Clefablite: "Mega Clefable",
   Crabominite: "Mega Crabominable",
   Delphoxite: "Mega Delphox",
-  Dragalgeite: "Mega Dragalge",
+  Dragalgite: "Mega Dragalge",
   Dragoninite: "Mega Dragonite",
   Drampanite: "Mega Drampa",
   Eelektrossite: "Mega Eelektross",
@@ -85,7 +91,7 @@ const megaStonePokemon = Object.freeze({
   Lucarionite: "Mega Lucario",
   Malamarite: "Mega Malamar",
   Manectite: "Mega Manectric",
-  Mawileite: "Mega Mawile",
+  Mawilite: "Mega Mawile",
   Medichamite: "Mega Medicham",
   Meganiumite: "Mega Meganium",
   Meowsticite: "Mega Meowstic",
@@ -96,21 +102,29 @@ const megaStonePokemon = Object.freeze({
   "Raichunite X": "Mega Raichu X",
   "Raichunite Y": "Mega Raichu Y",
   Sablenite: "Mega Sableye",
-  Sceptileite: "Mega Sceptile",
+  Sceptilite: "Mega Sceptile",
   Scizorite: "Mega Scizor",
-  Scolipedeite: "Mega Scolipede",
+  Scolipite: "Mega Scolipede",
   Scovillainite: "Mega Scovillain",
-  Scraftyite: "Mega Scrafty",
+  Scraftinite: "Mega Scrafty",
   Sharpedonite: "Mega Sharpedo",
   Skarmorite: "Mega Skarmory",
   Slowbronite: "Mega Slowbro",
-  Staraptorite: "Mega Staraptor",
+  Staraptite: "Mega Staraptor",
   Starminite: "Mega Starmie",
   Steelixite: "Mega Steelix",
   Swampertite: "Mega Swampert",
   Tyranitarite: "Mega Tyranitar",
   Venusaurite: "Mega Venusaur",
   Victreebelite: "Mega Victreebel",
+  // Retain imports saved with the previous catalog spellings.
+  Barbaracleite: "Mega Barbaracle",
+  Dragalgeite: "Mega Dragalge",
+  Mawileite: "Mega Mawile",
+  Sceptileite: "Mega Sceptile",
+  Scolipedeite: "Mega Scolipede",
+  Scraftyite: "Mega Scrafty",
+  Staraptorite: "Mega Staraptor",
 });
 const storageKey = "spreadlab.webui.state.v1";
 const savedSetsKey = "spreadlab.webui.savedSets.v1";
@@ -252,13 +266,14 @@ function rewriteCardSet(card) {
 
 function renderCard(card, parsed) {
   const name = card.querySelector('[data-field="name"]');
-  if (name) name.innerHTML = `${parsed.name} <em>${card.dataset.setCard === "attacker" ? "♂" : "♀"}</em>`;
+  if (name) name.textContent = parsed.name;
   const selector = card.querySelector("[data-pokemon-selector]");
   if (selector && document.activeElement !== selector) selector.value = parsed.name;
   const choice = card.querySelector("[data-pokemon-choice]");
   const baseName = baseSpeciesName(parsed.name);
   if (choice) choice.replaceChildren(document.createTextNode(baseName));
   syncFormSelector(card, parsed.name);
+  syncAbilitySelector(card, parsed);
   const itemSelector = card.querySelector("[data-item-selector]");
   if (itemSelector && document.activeElement !== itemSelector) itemSelector.value = parsed.item;
   const itemChoice = card.querySelector("[data-item-choice]");
@@ -287,14 +302,15 @@ function renderCard(card, parsed) {
     img.onerror = () => {
       if (img.dataset.fallbackApplied) return;
       img.dataset.fallbackApplied = "true";
-      img.src = "/api/sprite/__missingno";
+      img.src = "/api/sprite/__missingno?v=static-1";
     };
     delete img.dataset.fallbackApplied;
-    img.src = `/api/sprite/${encodeURIComponent(parsed.name)}`;
+    img.src = `/api/sprite/${encodeURIComponent(parsed.name)}?v=static-1`;
   }
 
   const moves = card.querySelector('[data-field="moves"]');
   if (moves) {
+    const crits = new Map([...moves.querySelectorAll("[data-crit-move]")].map(input => [input.dataset.critMove, input.checked]));
     if (!parsed.moves.length) {
       moves.innerHTML = `<div class="empty-moves">No moves selected</div>`;
     } else {
@@ -305,7 +321,7 @@ function renderCard(card, parsed) {
     moves.innerHTML = parsed.moves.map((move) => {
       const type = moveType(move);
       const icon = type === "Unknown" ? "" : `<img src="/assets/type-icons/${escapeAttr(type.toLowerCase())}.svg" alt="" aria-hidden="true"/>`;
-      return `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button"><span class="move-name">${escapeHtml(move)}</span><span class="move-type-badge ${typeClass(type)}" aria-label="${escapeAttr(type)} type">${icon}<span class="move-type-name">${escapeHtml(type)}</span></span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}"/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`;
+      return `<div class="move ${move === selectedMove ? "selected" : ""}" data-move="${escapeAttr(move)}"><button class="move-select" type="button"><span class="move-name">${escapeHtml(move)}</span><span class="move-type-badge ${typeClass(type)}" aria-label="${escapeAttr(type)} type">${icon}<span class="move-type-name">${escapeHtml(type)}</span></span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="${escapeAttr(move)}" ${crits.get(move) ? "checked" : ""}/>Crit</label><button class="move-delete" type="button" data-delete-move="${escapeAttr(move)}" aria-label="Delete ${escapeAttr(move)}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4l1 2H5l1-2Zm-1 4v7h6V6M7 7v4m2-4v4"/></svg></button></div>`;
     }).join("");
     if (card.dataset.setCard === "attacker") setSelectedMove(selectedMove);
     }
@@ -320,6 +336,7 @@ function renderCard(card, parsed) {
   }
   applyNatureClasses(card);
   syncAbilityEffects();
+  syncStatPresentation();
 }
 
 async function loadMoveTypes() {
@@ -424,6 +441,7 @@ function defaultSpeciesForBase(base) {
     Meowstic: "Meowstic (Male)", Mimikyu: "Mimikyu (Disguised Form)", Morpeko: "Morpeko (Full Belly Mode)",
     Palafin: "Palafin (Zero Form)", Polteageist: "Polteageist (Phony Form)", Sinistcha: "Sinistcha (Unremarkable Form)",
     Vivillon: "Vivillon (Icy Snow Pattern)",
+    Indeedee: "Indeedee (Male)", Toxtricity: "Toxtricity (Amped Form)", Squawkabilly: "Squawkabilly (Green Plumage)",
   };
   if (forms.includes(defaults[base])) return defaults[base];
   const preferred = ["normal", "shieldforme", "middayform", "disguisedform", "naturalform", "male", "zeroform", "fullbellymode", "phonyform", "unremarkableform", "mediumvariety", "vanillacream", "redflower"];
@@ -443,6 +461,10 @@ function canonicalSpeciesName(name) {
     rotomheat: "Rotom (Heat)", rotomwash: "Rotom (Wash)", rotomfrost: "Rotom (Frost)", rotomfan: "Rotom (Fan)", rotommow: "Rotom (Mow)",
     gourgeistsmall: "Gourgeist (Small Variety)", gourgeistlarge: "Gourgeist (Large Variety)", gourgeistsuper: "Gourgeist (Jumbo Variety)",
     lycanrocmidday: "Lycanroc (Midday Form)", lycanrocmidnight: "Lycanroc (Midnight Form)", lycanrocdusk: "Lycanroc (Dusk Form)",
+    persianalola: "Persian (Alolan)", toxtricityamped: "Toxtricity (Amped Form)", toxtricitylowkey: "Toxtricity (Low Key Form)",
+    indeedeem: "Indeedee (Male)", indeedeef: "Indeedee (Female)",
+    squawkabillygreen: "Squawkabilly (Green Plumage)", squawkabillyblue: "Squawkabilly (Blue Plumage)",
+    squawkabillyyellow: "Squawkabilly (Yellow Plumage)", squawkabillywhite: "Squawkabilly (White Plumage)",
     morpekohangry: "Morpeko (Hangry Mode)",
   };
   const alias = aliases[normalizeName(name)];
@@ -478,8 +500,7 @@ function renderTypes(card, name) {
 
 function pokemonTypeIcon(type) {
   const safeType = String(type || "Unknown");
-  const icon = safeType === "Unknown" ? "" : `<img src="/assets/type-icons/${escapeAttr(safeType.toLowerCase())}.svg" alt="" aria-hidden="true"/>`;
-  return `<span class="pokemon-type-icon" data-type="${escapeAttr(safeType)}" title="${escapeAttr(safeType)}" aria-label="${escapeAttr(safeType)} type">${icon}<span class="sr-only">${escapeHtml(safeType)}</span></span>`;
+  return `<span class="pokemon-type-icon ${typeClass(safeType)}" data-type="${escapeAttr(safeType)}" title="${escapeAttr(safeType)}" aria-label="${escapeAttr(safeType)} type">${escapeHtml(safeType)}</span>`;
 }
 
 function moveType(move) {
@@ -496,6 +517,7 @@ function setSelectedMove(moveName) {
   if (moveInput) moveInput.value = moveName;
   document.querySelectorAll(".move").forEach((node) => {
     node.classList.toggle("selected", node.dataset.move === moveName);
+    node.querySelector(".move-select")?.setAttribute("aria-pressed", String(node.dataset.move === moveName));
   });
   syncMoveEffectField(moveName);
 }
@@ -529,9 +551,10 @@ function syncRawEditorValue(editor) {
 function applyNatureClasses(card) {
   const nature = card.querySelector("[data-card-nature]")?.value || "Hardy";
   const [boost, nerf] = natureEffects[nature] || [];
-  card.querySelectorAll("[data-sp-key]").forEach((input) => {
-    input.classList.toggle("nature-boost", input.dataset.spKey === boost);
-    input.classList.toggle("nature-nerf", input.dataset.spKey === nerf);
+  card.querySelectorAll("[data-sp-key], [data-optimized-sp]").forEach((input) => {
+    const stat = input.dataset.spKey || input.dataset.optimizedSp;
+    input.classList.toggle("nature-boost", stat === boost);
+    input.classList.toggle("nature-nerf", stat === nerf);
   });
 }
 
@@ -540,7 +563,7 @@ function initToggles() {
     const input = label.querySelector("input");
     const sync = () => label.classList.toggle("is-on", input.checked);
     sync();
-    label.addEventListener("click", () => setTimeout(() => {
+    input.addEventListener("change", () => {
       delete input.dataset.auto;
       if (input.type === "radio") {
         document.querySelectorAll(`input[name="${input.name}"]`).forEach((peer) => {
@@ -549,7 +572,7 @@ function initToggles() {
       } else sync();
       saveState();
       autoRun();
-    }, 0));
+    });
   });
 }
 
@@ -610,7 +633,41 @@ function initAbilityToggles() {
   });
 }
 
+function natureForStat(current, stat, lower) {
+  if (!statOrder.some(([key]) => key === stat) || stat === "hp") return current;
+  const [boost, nerf] = natureEffects[current] || [];
+  const previous = lower ? nerf : boost;
+  let opposite = lower ? boost : nerf;
+  if (!opposite || opposite === stat) {
+    opposite = previous && previous !== stat ? previous : (stat === "atk" ? "spa" : "atk");
+  }
+  return Object.keys(natureEffects).find((nature) => {
+    const pair = natureEffects[nature];
+    return pair[lower ? 1 : 0] === stat && pair[lower ? 0 : 1] === opposite;
+  }) || current;
+}
+
 function initNatures() {
+  document.querySelectorAll("[data-sp-row], .preview-stats").forEach((row) => {
+    row.title = "Ctrl+Click: boost stat · Alt+Click: lower stat · HP is unaffected by nature";
+    // macOS converts Control-click into a context menu; handle its press too.
+    row.addEventListener("contextmenu", (event) => {
+      if (event.ctrlKey) event.preventDefault();
+    });
+    row.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || event.ctrlKey === event.altKey) return;
+      const cell = event.target.closest("[data-sp-key], .preview-stats > span");
+      const stat = cell?.dataset.spKey || cell?.querySelector("[data-optimized-sp]")?.dataset.optimizedSp;
+      if (!stat) return;
+      event.preventDefault();
+      const select = row.closest("[data-set-card]")?.querySelector("[data-card-nature]");
+      if (!select) return;
+      const nature = natureForStat(select.value, stat, event.altKey);
+      if (nature === select.value) return;
+      select.value = nature;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
   document.querySelectorAll("[data-card-nature]").forEach((select) => {
     select.addEventListener("change", () => {
       const card = select.closest("[data-set-card]");
@@ -822,7 +879,7 @@ function initMoves() {
       autoRun();
       return;
     }
-    if (event.target.closest(".move-select") && move.dataset.move) setSelectedMove(move.dataset.move);
+    if (move.dataset.move) setSelectedMove(move.dataset.move);
     saveState();
     autoRun();
   });
@@ -1064,7 +1121,19 @@ function setActivePokemonOption(options, index) {
 }
 
 function fuzzyPokemonMatches(query, limit) {
-  return fuzzyMatches(pokemonOptionSearchList, query, limit);
+  const key = normalizeName(query);
+  const speciesMatches = pokemonSearchList.filter((entry) => key && entry.key.includes(key));
+  if (speciesMatches.length) {
+    const species = new Set(speciesMatches.map((entry) => entry.name));
+    return fuzzyMatches(pokemonOptionSearchList.filter((entry) => species.has(entry.pokemon)), query, limit);
+  }
+  // Fuzzy matching is useful for species, but long preset titles produce
+  // unrelated subsequence matches. Search those titles by literal text only.
+  const candidates = pokemonOptionSearchList.map((entry) => ({
+    ...entry,
+    key: key && entry.key.includes(key) ? entry.key : normalizeName(entry.pokemon),
+  }));
+  return fuzzyMatches(candidates, query, limit);
 }
 
 function fuzzyItemMatches(query, limit) {
@@ -1503,6 +1572,8 @@ function initRun() {
     const controller = new AbortController();
     runController = controller;
     panel.classList.add("loading");
+    const mobileResult = document.querySelector("[data-mobile-result]");
+    if (mobileResult) mobileResult.textContent = "Recalculating…";
     panel.setAttribute("aria-busy", "true");
     try {
       const { path, body } = currentPayload();
@@ -1511,10 +1582,16 @@ function initRun() {
       if (!response.ok) throw new Error(data.error || response.statusText);
       if (controller.signal.aborted) return;
       await attachBestDamageRolls(data, path, body, controller.signal);
+      const rollsOpen = panel.querySelector(".damage-rolls")?.open || false;
       panel.innerHTML = renderResults(data);
+      const rolls = panel.querySelector(".damage-rolls");
+      if (rolls) rolls.open = rollsOpen;
+      updateResultPresentation(data);
       initShare();
     } catch (error) {
       if (error.name === "AbortError") return;
+      if (mobileResult) mobileResult.textContent = "Calculation failed";
+      clearOptimizedPreview();
       panel.innerHTML = `<div class="results-head"><b>Error</b><span>0 results</span></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
     } finally {
       if (runController === controller) {
@@ -1599,8 +1676,8 @@ function renderResults(data) {
   const best = data.best || matches[0] || null;
   const count = matches.length;
   const bestLabel = best?.sp_line || "No match";
-  const body = best ? `${warningsCard(data.warnings)}${bestCard(best)}${damageCard(best.result || best.combined || {}, best.rolls)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No spread</h2><p>No matching result.</p></article>`;
-  return resultShell("Results", `${count} results`, bestLabel, body);
+  const body = best ? `${warningsCard(data.warnings)}${damageCard(best.result || best.combined || {}, best.rolls, true)}${bestCard(best)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
+  return resultShell("Results", `${count} matching spreads`, bestLabel, body);
 }
 
 function warningsCard(warnings) {
@@ -1613,23 +1690,125 @@ function resultShell(title, count, best, body) {
 ${body}<div class="result-actions"><button type="button" disabled aria-disabled="true">▣ Copy Set</button><button type="button" disabled aria-disabled="true">⇩ Download JSON</button><button class="share-action" type="button" disabled aria-disabled="true">↗ Share Link</button></div>`;
 }
 
-function bestCard(best) {
-  const stats = best.final_stats || {};
-  return `<article class="best-card" data-tab-panel="best"><h2>Best Spread</h2><div class="best-grid"><div><small>Nature</small><b>${escapeHtml(best.nature || "-")}</b><em>API selected</em></div><div class="spread-big">${escapeHtml(best.sp_line || "-")}<small>Total SP: ${best.total_points ?? "-"} / 66</small></div><div><small>KO Chance</small><b>${percent(best.result?.ko_chance ?? best.combined?.ko_chance)}</b><small>from optimizer</small></div></div>${finalStats(stats)}</article>`;
+function spreadSummary(line) {
+  return String(line || "–").replace(/^SPs:\s*/i, "");
 }
 
-function damageCard(summary, rolls = summary.rolls || []) {
-  const pmax = Number(summary.percent_max || 0);
+function bestCard(best) {
+  const stats = best.final_stats || {};
+  return `<article class="best-card" data-tab-panel="best" aria-label="Optimized spread"><div class="spread-summary"><b>${escapeHtml(best.nature || "–")}</b><span>${escapeHtml(spreadSummary(best.sp_line))}</span><small>${best.total_points ?? "–"} / 66 SP used</small></div>${location.pathname.includes("ko") ? "" : `<p class="target-hp">Target HP: <b>${stats.hp ?? "–"}</b></p>`}${finalStats(stats)}</article>`;
+}
+
+function damageCard(summary, rolls = summary.rolls || [], optimized = false) {
+  const pmax = Math.max(0, Math.min(100, Number(summary.percent_max || 0)));
+  const pmin = Math.max(0, Math.min(100, Number(summary.percent_min || 0)));
   const move = document.querySelector('[name="move_name"]')?.value || "Selected move";
+  const defender = parseSet(document.querySelector('[data-set-card="defender"] .raw-editor')?.value || "").name;
   const damageRolls = Array.isArray(rolls) && rolls.length
-    ? `<div class="damage-rolls"><small>Damage rolls (${rolls.length})</small><code>[${rolls.map((roll) => escapeHtml(roll)).join(", ")}]</code></div>`
+    ? `<details class="damage-rolls"><summary>${rolls.length} damage rolls</summary><code>${rolls.map((roll) => escapeHtml(roll)).join(", ")}</code></details>`
     : "";
-  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title">vs <b>${escapeHtml(move)}</b> <span>API</span><em>PASS</em></div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "-"} - ${summary.max_damage ?? "-"}</b><span>${fmt(summary.percent_min)}% - ${fmt(summary.percent_max)}%</span></div><div><small>KO Chance</small><b>${percent(summary.ko_chance)}</b><span>calculated</span></div><div><small>Max damage</small><b>${summary.max_damage ?? "-"} HP</b><span>raw HP damage</span></div></div><div class="meter"><span style="width: ${Math.max(0, Math.min(100, pmax))}%"></span></div>${damageRolls}<p>Goal evaluated by API <strong>Live result</strong></p></article>`;
+  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title"><div><b>${escapeHtml(move)}</b> <span class="type-badge ${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><small>vs. ${escapeHtml(defender)}</small></div>${optimized ? '<span class="result-status">Best spread</span>' : ""}</div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
 }
 
 function matchesTable(matches) {
-  const rows = matches.slice(0, 12).map((entry) => `<tr><td>${entry.rank ?? "-"}</td><td>${escapeHtml(entry.nature || "-")}</td><td>${escapeHtml(entry.sp_line || "-")}</td><td>${entry.total_points ?? "-"}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "-"} - ${entry.result?.max_damage ?? entry.combined?.max_damage ?? "-"}</td></tr>`).join("");
-  return `<article class="table-card" data-tab-panel="all"><h2>All Results</h2><table><tr><th>Rank</th><th>Nature</th><th>SPs</th><th>Total SP</th><th>KO Chance</th><th>Damage</th></tr>${rows}</table></article>`;
+  const rows = matches.map((entry, index) => `<tr class="${index === 0 ? "best-row" : ""}"><td>${entry.rank ?? index + 1}${index === 0 ? '<span class="sr-only"> (best)</span>' : ''}</td><td>${escapeHtml(entry.nature || "–")}</td><td>${escapeHtml(spreadSummary(entry.sp_line))}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "–"}–${entry.result?.max_damage ?? entry.combined?.max_damage ?? "–"}</td></tr>`).join("");
+  return `<article class="table-card" data-tab-panel="all"><h2>All results</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Ranked optimizer results"><table><thead><tr><th scope="col">Rank</th><th scope="col">Nature</th><th scope="col">SPs</th><th scope="col">KO chance</th><th scope="col">Damage</th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
+}
+
+function clearOptimizedPreview() {
+  document.querySelectorAll("[data-optimized-sp]").forEach((cell) => {
+    cell.textContent = "–";
+    cell.classList.remove("is-modified");
+  });
+}
+
+function updateResultPresentation(data) {
+  const matches = Array.isArray(data) ? data : (data.matches || []);
+  const best = data.best || matches[0];
+  const summary = data.summary || best?.result || best?.combined;
+  const mobile = document.querySelector("[data-mobile-result]");
+  if (mobile) mobile.textContent = summary ? `${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} HP · ${percent(summary.ko_chance)} KO` : "No matching spread";
+  clearOptimizedPreview();
+  if (best?.sp_line) {
+    const parsed = parseSet(`Preview\n${best.sp_line}`);
+    document.querySelectorAll("[data-optimized-sp]").forEach((cell) => {
+      const value = parsed.sps[cell.dataset.optimizedSp] || 0;
+      cell.textContent = value;
+      cell.classList.toggle("is-modified", value !== 0);
+    });
+  }
+}
+
+function syncAbilitySelector(card, parsed) {
+  const select = card.querySelector("[data-ability-select]");
+  if (!select) return;
+  const available = speciesAbilities[normalizeName(parsed.name)] || speciesAbilities[normalizeName(megaAlias(parsed.name))] || [];
+  const names = [...new Set([...available, parsed.ability].filter(Boolean))];
+  select.innerHTML = names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
+  select.value = parsed.ability;
+}
+
+function initAppShell() {
+  document.querySelectorAll("[data-ability-select]").forEach(select => {
+    select.addEventListener("change", () => {
+      const card = select.closest("[data-set-card]");
+      const editor = card.querySelector(".raw-editor");
+      editor.value = replaceOrInsertLine(editor.value, /^Ability:/i, `Ability: ${select.value}`);
+      delete card.dataset.activeSavedSet;
+      syncRawEditor(editor);
+      refreshSetLibrary(card);
+      saveState();
+      autoRun();
+    });
+  });
+  try { document.documentElement.dataset.theme = localStorage.getItem("spreadlab.theme") || "midnight"; } catch (_) {}
+  const dialog = document.querySelector("#shell-dialog");
+  document.querySelectorAll("[data-open-dialog]").forEach(button => button.addEventListener("click", () => {
+    const kind = button.dataset.openDialog;
+    const title = dialog.querySelector("h2");
+    const content = dialog.querySelector("[data-dialog-content]");
+    if (kind === "settings") {
+      title.textContent = "Display settings";
+      content.innerHTML = `<label>Dark palette<select data-theme-picker><option value="midnight">Midnight</option><option value="slate">Slate</option></select></label><p class="dialog-hint">Saved on this device.</p>`;
+      const picker = content.querySelector("select");
+      picker.value = document.documentElement.dataset.theme || "midnight";
+      picker.addEventListener("change", () => {
+        document.documentElement.dataset.theme = picker.value;
+        try { localStorage.setItem("spreadlab.theme", picker.value); } catch (_) {}
+      });
+    } else if (kind === "guides") {
+      title.textContent = "Calculator guide";
+      content.innerHTML = `<div class="guide-copy"><h3>Build a matchup</h3><p>Choose Pokémon or a preset from each selector. Paste / edit set accepts Showdown text. Pick an attacking move and set its critical-hit toggle when needed.</p><h3>Find a spread</h3><p>Defensive mode minimizes investment while staying below your KO chance limit. Offensive mode finds the investment needed to reach your minimum KO chance. Nature “Any” lets the optimizer choose.</p><h3>Read the result</h3><p>Damage shows the HP range for the selected matchup. For 2HKO or 3HKO targets, the summary evaluates the combined sequence. Expand damage rolls to inspect individual rolls. Optimized SPs are a result preview, not editable locks.</p><h3>Battle state</h3><p>Active abilities can set terrain, weather, and boosts. Review conditions after changing Pokémon. All changes recalculate automatically.</p></div>`;
+    } else {
+      title.textContent = kind === "saved" ? "Saved sets" : "Metagame presets";
+      const sets = kind === "saved" ? savedSets : builtInSets;
+      content.innerHTML = `<p class="dialog-hint">${kind === "saved" ? "Your sets saved on this device." : "Bundled competitive presets; not live usage rankings."}</p><div class="library-filters"><label>Search<input data-library-search type="search" placeholder="Pokémon or set name"/></label><label>Load into<select data-library-side><option value="attacker">Attacker</option><option value="defender">Defender</option></select></label></div><div class="library-list" data-library-list></div>`;
+      const render = () => {
+        const query = normalizeName(content.querySelector("[data-library-search]").value);
+        const matches = sets.filter(set => normalizeName(`${set.pokemon} ${set.name}`).includes(query));
+        content.querySelector("[data-library-list]").innerHTML = matches.length ? matches.map(set => `<button type="button" data-library-set="${escapeAttr(set.id)}"><b>${escapeHtml(set.pokemon)}</b><span>${escapeHtml(set.name)}</span></button>`).join("") : `<p class="dialog-hint">${kind === "saved" && !sets.length ? "No saved sets yet. Use Save set below either Pokémon." : "No matching sets."}</p>`;
+      };
+      content.querySelector("[data-library-search]").addEventListener("input", render);
+      content.querySelector("[data-library-list]").addEventListener("click", event => {
+        const button = event.target.closest("[data-library-set]");
+        const set = sets.find(set => set.id === button?.dataset.librarySet);
+        if (!set) return;
+        const side = content.querySelector("[data-library-side]").value;
+        applyPokemonSelection(side, baseSpeciesName(canonicalSpeciesName(set.pokemon)), set.id);
+        dialog.close();
+        document.querySelector(`[data-set-card="${side}"] .pokemon-choice`)?.focus();
+      });
+      render();
+    }
+    dialog.showModal();
+  }));
+  dialog.querySelector("[data-close-dialog]").addEventListener("click", () => dialog.close());
+}
+
+function syncStatPresentation() {
+  document.querySelectorAll("[data-sp-key], [data-boost-key]").forEach((input) => {
+    input.classList.toggle("is-modified", Number(input.value) !== 0);
+  });
 }
 
 function finalStats(stats) {
@@ -1849,6 +2028,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initShare();
   initRun();
   initSetLibraries();
+  initAppShell();
   initToggles();
   initPersistentInputs();
   initPokemonSelectors();
@@ -1864,6 +2044,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveState();
   initMoves();
   initSwap();
+  document.querySelector(".workspace")?.addEventListener("input", syncStatPresentation);
+  syncStatPresentation();
   autoRun();
 });
 

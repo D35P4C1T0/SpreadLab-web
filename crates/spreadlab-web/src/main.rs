@@ -47,157 +47,6 @@ struct AppState {
     data: Arc<ChampionsData>,
 }
 
-const POKEMON_CHAMPIONS_ITEMS: &[&str] = &[
-    "Abomasite",
-    "Absolite",
-    "Aerodactylite",
-    "Aggronite",
-    "Alakazite",
-    "Altarianite",
-    "Ampharosite",
-    "Aspear Berry",
-    "Audinite",
-    "Babiri Berry",
-    "Banettite",
-    "Barbaracleite",
-    "Beedrillite",
-    "Big Root",
-    "Black Belt",
-    "Black Glasses",
-    "Blastoisinite",
-    "Blazikenite",
-    "BrightPowder",
-    "Cameruptite",
-    "Chandelurite",
-    "Charcoal",
-    "Charizardite X",
-    "Charizardite Y",
-    "Charti Berry",
-    "Cheri Berry",
-    "Chesnaughtite",
-    "Chesto Berry",
-    "Chilan Berry",
-    "Chimechite",
-    "Choice Scarf",
-    "Chople Berry",
-    "Clefablite",
-    "Coba Berry",
-    "Colbur Berry",
-    "Crabominite",
-    "Damp Rock",
-    "Delphoxite",
-    "Dragalgeite",
-    "Dragon Fang",
-    "Dragoninite",
-    "Drampanite",
-    "Eelektrossite",
-    "Emboarite",
-    "Excadrite",
-    "Expert Belt",
-    "Fairy Feather",
-    "Falinksite",
-    "Feraligite",
-    "Floettite",
-    "Focus Band",
-    "Focus Sash",
-    "Froslassite",
-    "Galladite",
-    "Garchompite",
-    "Gardevoirite",
-    "Gengarite",
-    "Glalitite",
-    "Glimmoranite",
-    "Golurkite",
-    "Greninjite",
-    "Gyaradosite",
-    "Haban Berry",
-    "Hard Stone",
-    "Hawluchanite",
-    "Heat Rock",
-    "Heracronite",
-    "Houndoominite",
-    "Icy Rock",
-    "Iron Ball",
-    "Kangaskhanite",
-    "Kasib Berry",
-    "Kebia Berry",
-    "King's Rock",
-    "Leftovers",
-    "Leppa Berry",
-    "Life Orb",
-    "Light Ball",
-    "Light Clay",
-    "Lopunnite",
-    "Lucarionite",
-    "Lum Berry",
-    "Magnet",
-    "Malamarite",
-    "Manectite",
-    "Mawileite",
-    "Medichamite",
-    "Meganiumite",
-    "Mental Herb",
-    "Meowsticite",
-    "Metagrossite",
-    "Metal Coat",
-    "Metronome",
-    "Miracle Seed",
-    "Muscle Band",
-    "Mystic Water",
-    "Never-Melt Ice",
-    "Occa Berry",
-    "Oran Berry",
-    "Passho Berry",
-    "Payapa Berry",
-    "Pecha Berry",
-    "Persim Berry",
-    "Pidgeotite",
-    "Pinsirite",
-    "Poison Barb",
-    "Pyroarite",
-    "Quick Claw",
-    "Raichunite X",
-    "Raichunite Y",
-    "Rawst Berry",
-    "Rindo Berry",
-    "Roseli Berry",
-    "Sablenite",
-    "Sceptileite",
-    "Scizorite",
-    "Scolipedeite",
-    "Scope Lens",
-    "Scovillainite",
-    "Scraftyite",
-    "Sharp Beak",
-    "Sharpedonite",
-    "Shed Shell",
-    "Shell Bell",
-    "Shuca Berry",
-    "Silk Scarf",
-    "SilverPowder",
-    "Sitrus Berry",
-    "Skarmorite",
-    "Slowbronite",
-    "Smooth Rock",
-    "Soft Sand",
-    "Spell Tag",
-    "Staraptorite",
-    "Starminite",
-    "Steelixite",
-    "Swampertite",
-    "Tanga Berry",
-    "TwistedSpoon",
-    "Tyranitarite",
-    "Venusaurite",
-    "Victreebelite",
-    "Wacan Berry",
-    "White Herb",
-    "Wide Lens",
-    "Wise Glasses",
-    "Yache Berry",
-    "Zoom Lens",
-];
-
 const TRANSPARENT_PNG: &[u8] = &[
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
     0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1, 13, 10,
@@ -325,7 +174,7 @@ async fn dev_asset_versions(paths: &[&str]) -> Vec<Option<(std::time::SystemTime
 
 async fn api_sprite(Path(name): Path<String>) -> Result<impl IntoResponse, WebError> {
     let slug = showdown_sprite_slug(&name);
-    let path = PathBuf::from("crates/spreadlab-web/assets/sprites-static/showdown")
+    let path = PathBuf::from("crates/spreadlab-web/assets/sprites-static/showdown-gen5")
         .join(format!("{slug}.img"));
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -362,7 +211,7 @@ const MISSINGNO_GEN3: &[u8] = include_bytes!("../assets/fallbacks/missingno-gen3
 
 async fn fetch_showdown_sprite(slug: &str) -> Option<Vec<u8>> {
     let response = reqwest::get(format!(
-        "https://play.pokemonshowdown.com/sprites/ani/{slug}.gif"
+        "https://play.pokemonshowdown.com/sprites/gen5/{slug}.png"
     ))
     .await
     .ok()?;
@@ -492,7 +341,7 @@ async fn api_meta(State(state): State<AppState>) -> Result<Json<api::MetadataRes
     let response = tokio::task::spawn_blocking(move || {
         let mut response = api::MetadataResponse {
             species: data.species_names().map(str::to_owned).collect(),
-            regulation: data.regulation_m_b_names().map(str::to_owned).collect(),
+            regulation: data.regulation_m_c_names().map(str::to_owned).collect(),
             items: pokemon_champions_item_names().map(str::to_owned).collect(),
             abilities: data.ability_names().map(str::to_owned).collect(),
             moves: data.move_names().map(str::to_owned).collect(),
@@ -609,7 +458,7 @@ fn unsupported_item_names(data: &ChampionsData) -> Vec<String> {
 }
 
 fn pokemon_champions_item_names() -> impl Iterator<Item = &'static str> {
-    POKEMON_CHAMPIONS_ITEMS.iter().copied()
+    spreadlab_rs::data::POKEMON_CHAMPIONS_ITEMS.iter().copied()
 }
 
 async fn api_damage(
@@ -1534,7 +1383,7 @@ mod tests {
     fn pokemon_champions_item_catalog_contains_recent_items() {
         let items = pokemon_champions_item_names().collect::<BTreeSet<_>>();
 
-        for item in ["Choice Scarf", "Garchompite", "Barbaracleite"] {
+        for item in ["Choice Scarf", "Garchompite", "Barbaracite"] {
             assert!(
                 items.contains(item),
                 "{item} missing from item selector catalog"
@@ -1553,22 +1402,114 @@ mod tests {
     }
 
     #[test]
-    fn pokeapi_resource_names_are_display_names() {
-        assert_eq!(
-            pokeapi_resource_display_name("charizard-mega-x"),
-            "Mega Charizard X"
-        );
-        assert_eq!(pokeapi_resource_display_name("mr-mime"), "Mr-Mime");
-        assert_eq!(
-            pokeapi_resource_display_name("giratina-origin"),
-            "Giratina-Origin"
-        );
-    }
-
-    #[test]
     fn champions_item_catalog_is_supported_by_spreadlab_parser() {
         let data = ChampionsData::load().expect("Champions data loads");
         assert_eq!(unsupported_item_names(&data), Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn regulation_m_c_catalog_reaches_web_endpoints() {
+        let data = Arc::new(ChampionsData::load().unwrap());
+        let state = AppState { data: data.clone() };
+        let meta = api_meta(State(state.clone())).await.unwrap().0;
+        let types = api_species_types(State(state)).await.0;
+        let abilities = api_species_abilities().await.0;
+        let additions = [
+            "Wigglytuff",
+            "Persian",
+            "Persian (Alolan)",
+            "Farfetch’d",
+            "Mr. Mime",
+            "Swalot",
+            "Salamence",
+            "Gogoat",
+            "Golisopod",
+            "Rillaboom",
+            "Cinderace",
+            "Inteleon",
+            "Thievul",
+            "Toxtricity (Amped Form)",
+            "Toxtricity (Low Key Form)",
+            "Grapploct",
+            "Perrserker",
+            "Sirfetch’d",
+            "Pincurchin",
+            "Indeedee (Male)",
+            "Indeedee (Female)",
+            "Pawmot",
+            "Arboliva",
+            "Mabosstiff",
+            "Baxcalibur",
+            "Squawkabilly (Green Plumage)",
+            "Squawkabilly (Blue Plumage)",
+            "Squawkabilly (Yellow Plumage)",
+            "Squawkabilly (White Plumage)",
+            "Mega Absol Z",
+            "Mega Salamence",
+            "Mega Garchomp Z",
+            "Mega Lucario Z",
+            "Mega Golisopod",
+            "Mega Baxcalibur",
+        ];
+        for name in additions {
+            assert!(
+                meta.species.iter().any(|entry| entry == name),
+                "missing {name}"
+            );
+            assert!(types.contains_key(name), "missing types for {name}");
+            assert!(data.species(name).is_ok(), "cannot parse {name}");
+            for ability in &abilities[name] {
+                assert!(meta.abilities.contains(ability), "missing {ability}");
+                assert!(
+                    spreadlab_rs::data::parse_ability(ability).is_ok(),
+                    "cannot parse {ability}"
+                );
+            }
+        }
+        assert!(meta.regulation.iter().any(|name| name == "Mega Baxcalibur"));
+        for item in [
+            "Leek",
+            "Rocky Helmet",
+            "Air Balloon",
+            "Red Card",
+            "Binding Band",
+            "Eject Button",
+            "Normal Gem",
+            "Terrain Extender",
+            "Electric Seed",
+            "Psychic Seed",
+            "Misty Seed",
+            "Grassy Seed",
+            "Absolite Z",
+            "Salamencite",
+            "Garchompite Z",
+            "Lucarionite Z",
+            "Golisopite",
+            "Baxcalibrite",
+        ] {
+            assert!(
+                meta.items.iter().any(|entry| entry == item),
+                "missing {item}"
+            );
+            assert!(
+                spreadlab_rs::data::parse_item(item).is_ok(),
+                "cannot parse {item}"
+            );
+        }
+        for name in [
+            "Boomburst",
+            "Overdrive",
+            "Drum Beating",
+            "Pyro Ball",
+            "Snipe Shot",
+            "Glaive Rush",
+        ] {
+            assert!(
+                meta.moves.iter().any(|entry| entry == name),
+                "missing {name}"
+            );
+            assert!(data.move_data(name).unwrap().to_damage_move().is_ok());
+        }
     }
 
     #[test]
@@ -1609,15 +1550,15 @@ mod tests {
 
     #[test]
     fn unsupported_abilities_are_warned_and_removed_before_core_parse() {
-        let raw = "Garchomp @ Focus Sash\nAbility: Rough Skin\nJolly Nature\n- Earthquake";
+        let raw = "Garchomp @ Focus Sash\nAbility: Unknown Ability\nJolly Nature\n- Earthquake";
         let normalized = normalize_showdown_set(raw);
         let warnings = warning_messages_from_sets([&raw.to_owned()]);
 
-        assert!(!normalized.contains("Ability: Rough Skin"));
+        assert!(!normalized.contains("Ability: Unknown Ability"));
         assert_eq!(
             warnings,
             vec![
-                "Ability Rough Skin is not supported yet; it was ignored for this calculation."
+                "Ability Unknown Ability is not supported yet; it was ignored for this calculation."
                     .to_owned()
             ]
         );

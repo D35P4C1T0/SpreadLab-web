@@ -1,0 +1,11 @@
+{
+  "name": "spreadlab-web-ui-tests",
+  "private": true,
+  "scripts": {
+    "test:catalog": "node --test crates/spreadlab-web/tests/catalog.test.cjs",
+    "test:ui": "node --test crates/spreadlab-web/tests/workspace.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
