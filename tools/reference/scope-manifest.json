@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "ruleset": "Pokemon Champions Regulation M-B normal dex",
+  "ruleset": "Pokemon Champions Regulation M-C normal dex",
   "generation": 10,
   "entrypoints": ["CALCULATE_ALL_MOVES_SV", "GET_DAMAGE_SV", "getKOChanceText"],
   "includedFiles": [
@@ -19,8 +19,8 @@
     "browserPresentation": "HTML, CSS, JQuery events, DOM descriptions, local storage, audio, and images do not affect semantic library results",
     "legacyGenerations": "Generation 1-9 entrypoints are unreachable when gen is 10",
     "legendsZA": "gen == 9.5 branches are unreachable when gen is 10",
-    "dynamaxAndMax": "not available in Champions Regulation M-B normal dex",
-    "zMoves": "not available in Champions Regulation M-B normal dex",
+    "dynamaxAndMax": "not available in Champions Regulation M-C normal dex",
+    "zMoves": "not available in Champions Regulation M-C normal dex",
     "championsNatDex": "separate future milestone",
     "optimizer": "Rust-only feature, absent from reference damage engine"
   },
@@ -93,6 +93,16 @@
         "CALC_HP_LGPE", "CALC_STAT_LGPE"
       ],
       "reason": "generation or mode guards make these unreachable in declared scope"
+    }
+  },
+  "additionalHelpers": {
+    "script_res/ap_calc.js": {
+      "function": "calcUserHP",
+      "coveredBranches": [
+        "Pain Split",
+        "Leech Seed (Big Root, Liquid Ooze, Magic Guard)"
+      ],
+      "excludedBranches": "Existing recoil, draining moves, other self-damage/recovery, and presentation remain outside the result-component API."
     }
   },
   "unknown": []

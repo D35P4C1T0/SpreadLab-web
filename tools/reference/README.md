@@ -8,7 +8,7 @@ Prepare the ignored reference checkout:
 
 ```sh
 git clone https://github.com/nerd-of-now/NCP-VGC-Damage-Calculator.git reference/NCP-VGC-Damage-Calculator
-git -C reference/NCP-VGC-Damage-Calculator checkout dfbf020d4ed7df8921c6e11bbaa23410f6ca1448
+git -C reference/NCP-VGC-Damage-Calculator checkout 1369b359b85f0a6343df006acde92cc4a7d07805
 ```
 
 Run smoke input:

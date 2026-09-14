@@ -39,7 +39,9 @@ checked against the [Champions item list](https://www.serebii.net/pokemonchampio
 `CHAMPIONS_CURRENT_SPECIES` / `champions_current_species` expose typed source-dump
 metadata for constructing calculator inputs. `CHAMPIONS_ITEM_VALUES` exposes all
 current typed items. The `CHAMPIONS_REFERENCE_*` APIs remain tied to the pinned
-M-B browser oracle; its parity claim does not cover M-C additions.
+M-C browser oracle at `1369b359b85f0a6343df006acde92cc4a7d07805`.
+The reference inventory has 346 forms, 511 moves, 166 items, 216 abilities, and
+151 sets.
 
 Aura Guard is implemented as a contact damage reducer. Air Balloon, Normal Gem,
 and terrain Seeds use the existing damage mechanics. Leek's critical-hit chance,

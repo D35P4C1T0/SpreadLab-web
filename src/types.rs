@@ -488,6 +488,9 @@ pub enum Ability {
     RunAway,
     EmergencyExit,
     SeedSower,
+    BadDreams,
+    GrassySurge,
+    PsychicSurge,
 }
 
 impl Ability {
@@ -531,6 +534,7 @@ pub enum Item {
     Golisopite,
     Baxcalibrite,
     BigRoot,
+    StickyBarb,
     BrightPowder,
     ChoiceBand,
     ChoiceScarf,
@@ -1172,6 +1176,19 @@ pub struct Field {
     pub beads_of_ruin: bool,
     pub neutralizing_gas: bool,
     pub defender_leech_seed: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub defender_aqua_ring: bool,
+    /// Upstream directional side flag: heals the defender and grounds both grounding checks.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub ingrain: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub defender_nightmare: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub defender_curse: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub defender_binding: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub defender_sea_of_fire: bool,
 }
 
 impl Default for Field {
@@ -1208,6 +1225,12 @@ impl Default for Field {
             beads_of_ruin: false,
             neutralizing_gas: false,
             defender_leech_seed: false,
+            defender_aqua_ring: false,
+            ingrain: false,
+            defender_nightmare: false,
+            defender_curse: false,
+            defender_binding: false,
+            defender_sea_of_fire: false,
         }
     }
 }

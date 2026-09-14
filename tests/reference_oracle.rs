@@ -1774,3 +1774,403 @@ fn batch_counter_moves_infer_opposing_move_like_pinned_javascript() {
         assert_eq!(result.left[0].damage_rolls, expected, "{}", pairs[index].0);
     }
 }
+
+fn update_case(move_name: &str) -> CalcInput {
+    use damage_calc::data::champions::champions_reference_move;
+    let pokemon = Pokemon::champions(
+        "Neutral",
+        [Some(PokemonType::Normal), None],
+        StatTable::new(100, 100, 100, 100, 100, 100),
+        StatTable::new(0, 0, 0, 0, 0, 0),
+        Nature::Hardy,
+    );
+    CalcInput {
+        attacker: pokemon.clone(),
+        defender: pokemon,
+        move_: champions_reference_move(move_name)
+            .expect("reference move")
+            .move_(),
+        field: Field::default(),
+        ruleset: Ruleset::Champions,
+    }
+}
+
+fn update_case_json(input: &CalcInput) -> serde_json::Value {
+    use damage_calc::data::champions::{CHAMPIONS_ITEM_VALUES, CHAMPIONS_REFERENCE_ABILITY_VALUES};
+    use damage_calc::{Ability, Item, StatusCondition, Terrain, Weather};
+    let pokemon = |p: &Pokemon| {
+        let ability = CHAMPIONS_REFERENCE_ABILITY_VALUES
+            .iter()
+            .find(|(_, a)| *a == p.ability)
+            .map(|(name, _)| *name)
+            .unwrap_or(match p.ability {
+                Ability::BadDreams => "Bad Dreams",
+                Ability::Comatose => "Comatose",
+                _ => "",
+            });
+        let item = CHAMPIONS_ITEM_VALUES
+            .iter()
+            .find(|(_, i)| *i == p.item)
+            .map(|(name, _)| *name)
+            .unwrap_or(match p.item {
+                Item::BigRoot => "Big Root",
+                Item::StickyBarb => "Sticky Barb",
+                Item::PunchingGlove => "Punching Glove",
+                Item::ProtectivePads => "Protective Pads",
+                _ => "",
+            });
+        serde_json::json!({
+            "name": p.name, "types": p.types.map(|t| t.map(|t| format!("{t:?}")).unwrap_or_default()),
+            "baseStats": { "hp": p.base_stats.hp, "attack": p.base_stats.attack, "defense": p.base_stats.defense,
+                "specialAttack": p.base_stats.special_attack, "specialDefense": p.base_stats.special_defense, "speed": p.base_stats.speed },
+            "statPoints": {}, "nature": "Hardy", "level": p.level,
+            "ability": ability, "abilityOn": p.ability_on, "item": item,
+            "maxHp": p.max_hp_override, "currentHp": p.current_hp,
+            "boosts": { "attack": p.boosts.attack, "defense": p.boosts.defense, "specialAttack": p.boosts.special_attack,
+                "specialDefense": p.boosts.special_defense, "speed": p.boosts.speed },
+            "status": match p.status { StatusCondition::Poisoned => "Poisoned", StatusCondition::BadlyPoisoned => "Badly Poisoned",
+                StatusCondition::Burned => "Burned", StatusCondition::Asleep => "Asleep", _ => "Healthy" },
+            "toxicCounter": p.toxic_counter, "moves": []
+        })
+    };
+    let mut left = pokemon(&input.attacker);
+    left["moves"] = serde_json::json!([{
+        "name": input.move_.name, "basePower": input.move_.base_power,
+        "type": format!("{:?}", input.move_.type_), "category": format!("{:?}", input.move_.category),
+        "makesContact": input.move_.makes_contact, "isCritical": input.move_.is_critical,
+        "isPunch": input.move_.is_punch, "isSound": input.move_.is_sound, "hits": input.move_.hits,
+    }]);
+    let f = input.field;
+    serde_json::json!({ "left": left, "right": pokemon(&input.defender), "field": {
+        "format": "Doubles", "weather": if f.weather == Weather::None { String::new() } else { format!("{:?}", f.weather) },
+        "terrain": if f.terrain == Terrain::None { String::new() } else { format!("{:?}", f.terrain) },
+        "gravity": f.gravity, "right": {
+            "protect": f.protect, "spikes": f.defender_side.spikes, "saltCure": f.defender_side.salt_cure,
+            "aquaRing": f.defender_aqua_ring, "ingrain": f.ingrain, "leechSeed": f.defender_leech_seed,
+            "nightmare": f.defender_nightmare, "curse": f.defender_curse, "binding": f.defender_binding,
+            "seaOfFire": f.defender_sea_of_fire,
+        }
+    } })
+}
+
+fn assert_update_cases(cases: Vec<CalcInput>, compare_ko: bool) {
+    let Some(reference) = pinned_reference() else {
+        return;
+    };
+    let inputs = cases.iter().map(update_case_json).collect::<Vec<_>>();
+    let oracle = run_oracle(&serde_json::json!(inputs), &reference);
+    for (index, input) in cases.into_iter().enumerate() {
+        let result = calculate_damage(input.clone()).expect("update case");
+        let expected = &oracle[index]["left"][0];
+        let expected_damage = expected["damage"].as_array().expect("damage");
+        let rolls = |values: &[serde_json::Value]| {
+            values
+                .iter()
+                .map(|v| v.as_i64().expect("roll").max(0) as u16)
+                .collect::<Vec<_>>()
+        };
+        if expected_damage
+            .first()
+            .is_some_and(serde_json::Value::is_array)
+        {
+            let hits = expected_damage
+                .iter()
+                .map(|v| rolls(v.as_array().unwrap()))
+                .collect::<Vec<_>>();
+            assert_eq!(result.hit_rolls, hits, "multi-hit case {index}");
+        } else if result.hit_rolls.len() > 1 {
+            for hit in &result.hit_rolls {
+                assert_eq!(*hit, rolls(expected_damage), "repeated-hit case {index}");
+            }
+        } else {
+            assert_eq!(
+                result.damage_rolls,
+                rolls(expected_damage),
+                "case {index}: {}",
+                update_case_json(&input)
+            );
+        }
+        if let Some(delta) = result.defender_hp_delta {
+            assert_eq!(
+                i64::from(delta),
+                expected["damage"][0].as_i64().unwrap(),
+                "HP sharing case {index}"
+            );
+        }
+        let attacker_max_hp = input.attacker.max_hp_override.unwrap_or(
+            damage_calc::calculate_stats(&input.attacker, input.ruleset)
+                .unwrap()
+                .hp,
+        );
+        for (delta, key) in [
+            (result.attacker_hp_effects.pain_split, "painSplitPercent"),
+            (result.attacker_hp_effects.leech_seed, "leechSeedPercent"),
+        ] {
+            if let Some(delta) = delta {
+                let percent =
+                    (f64::from(delta) / f64::from(attacker_max_hp) * 1000.0 + 0.5).floor() / 10.0;
+                assert_eq!(
+                    percent,
+                    oracle[index]["attackerHpEffects"][key].as_f64().unwrap(),
+                    "attacker HP case {index}, {key}"
+                );
+            }
+        }
+        if compare_ko {
+            for use_index in 0..4 {
+                let js = expected["koChances"][use_index]
+                    .as_f64()
+                    .expect("KO chance") as f32;
+                assert!(
+                    (result.ko_chance_by_move_use[use_index] - js).abs() < 0.000_001,
+                    "case {index}, use {}: Rust {}, JS {js}; {input:?}",
+                    use_index + 1,
+                    result.ko_chance_by_move_use[use_index]
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn upstream_update_damage_regressions_match_javascript() {
+    use damage_calc::{Ability, Item, Terrain};
+    let mut cases = Vec::new();
+    for ability in [Ability::PiercingDrill, Ability::UnseenFist] {
+        for contact in [false, true] {
+            for item in [Item::None, Item::ProtectivePads, Item::PunchingGlove] {
+                let mut c = update_case("Fire Punch");
+                c.attacker.ability = ability;
+                c.attacker.item = item;
+                c.move_.makes_contact = contact;
+                c.field.protect = true;
+                cases.push(c);
+            }
+        }
+    }
+    for ability in [Ability::None, Ability::Levitate, Ability::Eelevate] {
+        for terrain in [
+            Terrain::None,
+            Terrain::Electric,
+            Terrain::Grassy,
+            Terrain::Misty,
+            Terrain::Psychic,
+        ] {
+            for grounded in [false, true] {
+                let mut c = update_case("Terrain Pulse");
+                c.attacker.ability = ability;
+                c.field.terrain = terrain;
+                c.field.ingrain = grounded;
+                cases.push(c);
+            }
+        }
+    }
+    for item in [Item::None, Item::IronBall, Item::AirBalloon] {
+        for gravity in [false, true] {
+            for attacker_ability in [Ability::None, Ability::MoldBreaker] {
+                let mut c = update_case("Earth Power");
+                c.attacker.ability = attacker_ability;
+                c.defender.ability = Ability::Eelevate;
+                c.defender.item = item;
+                c.field.gravity = gravity;
+                cases.push(c);
+            }
+        }
+    }
+    for attack_speed in [1, 25, 100, 200] {
+        for defense_speed in [1, 25, 100, 200] {
+            let mut c = update_case("Gyro Ball");
+            c.attacker.base_stats.speed = attack_speed;
+            c.defender.base_stats.speed = defense_speed;
+            cases.push(c);
+        }
+    }
+    for attacker_hp in [50, 51, 100, 101] {
+        for defender_hp in [50, 51, 100, 101] {
+            let mut c = update_case("Pain Split");
+            c.attacker.current_hp = Some(attacker_hp);
+            c.defender.current_hp = Some(defender_hp);
+            cases.push(c);
+        }
+    }
+    for ability in [Ability::Plus, Ability::Minus, Ability::Libero] {
+        for active in [false, true] {
+            for move_name in ["Body Slam", "Flamethrower"] {
+                let mut c = update_case(move_name);
+                c.attacker.ability = ability;
+                c.attacker.ability_on = active;
+                cases.push(c);
+            }
+        }
+    }
+    for move_name in ["Meteor Beam", "Electro Shot"] {
+        for ability in [Ability::None, Ability::Contrary] {
+            for boost in -6..=6 {
+                for critical in [false, true] {
+                    let mut c = update_case(move_name);
+                    c.attacker.ability = ability;
+                    c.attacker.boosts.special_attack = boost;
+                    c.move_.is_critical = critical;
+                    cases.push(c);
+                }
+            }
+        }
+    }
+    for weather in [
+        damage_calc::Weather::None,
+        damage_calc::Weather::Sun,
+        damage_calc::Weather::Rain,
+        damage_calc::Weather::Sand,
+        damage_calc::Weather::Snow,
+    ] {
+        for move_name in [
+            "Weather Ball",
+            "Solar Beam",
+            "Solar Blade",
+            "Flamethrower",
+            "Surf",
+        ] {
+            let mut c = update_case(move_name);
+            c.attacker.ability = Ability::MegaSol;
+            c.field.weather = weather;
+            cases.push(c);
+        }
+    }
+    for ability in [Ability::Dragonize, Ability::FireMane] {
+        for move_name in ["Body Slam", "Hyper Voice", "Flamethrower", "Fire Punch"] {
+            let mut c = update_case(move_name);
+            c.attacker.ability = ability;
+            cases.push(c);
+        }
+    }
+    for attacker_ability in [Ability::None, Ability::MoldBreaker, Ability::LongReach] {
+        for move_name in ["Body Slam", "Hyper Voice"] {
+            let mut c = update_case(move_name);
+            c.attacker.ability = attacker_ability;
+            c.defender.ability = Ability::AuraGuard;
+            cases.push(c);
+        }
+    }
+    for ability in [Ability::GrassySurge, Ability::PsychicSurge] {
+        for move_name in ["Terrain Pulse", "Expanding Force", "Grassy Glide"] {
+            let mut c = update_case(move_name);
+            c.attacker.ability = ability;
+            cases.push(c);
+        }
+    }
+    for move_name in ["Meteor Beam", "Electro Shot"] {
+        for boost in [-1, 0, 1] {
+            let mut c = update_case(move_name);
+            c.attacker.boosts.special_attack = boost;
+            c.defender.ability = Ability::Unaware;
+            cases.push(c);
+        }
+    }
+    let mut feint = update_case("Feint");
+    feint.field.protect = true;
+    cases.push(feint);
+    for attacker_ability in [Ability::None, Ability::MagicGuard] {
+        for defender_ability in [Ability::None, Ability::LiquidOoze] {
+            for item in [Item::None, Item::BigRoot] {
+                for current_hp in [1, 8, 50, 101] {
+                    let mut c = update_case("Pain Split");
+                    c.field.defender_leech_seed = true;
+                    c.attacker.ability = attacker_ability;
+                    c.attacker.item = item;
+                    c.attacker.current_hp = Some(50);
+                    c.defender.ability = defender_ability;
+                    c.defender.current_hp = Some(current_hp);
+                    cases.push(c);
+                }
+            }
+        }
+    }
+    assert_update_cases(cases, false);
+}
+
+#[test]
+fn upstream_update_residuals_match_javascript() {
+    use damage_calc::{Ability, Item, StatusCondition, Terrain, Weather};
+    let mut cases = Vec::new();
+    for effect in 0..9 {
+        for item in [
+            Item::None,
+            Item::BigRoot,
+            Item::BindingBand,
+            Item::Leftovers,
+            Item::SitrusBerry,
+        ] {
+            for ability in [Ability::None, Ability::MagicGuard, Ability::Eelevate] {
+                for move_name in ["Seismic Toss", "Psychic Noise", "Knock Off"] {
+                    let mut c = update_case(move_name);
+                    c.attacker.level = 50;
+                    c.defender.max_hp_override = Some(100);
+                    c.defender.current_hp = Some(100);
+                    c.defender.item = item;
+                    c.defender.ability = ability;
+                    match effect {
+                        0 => c.field.defender_aqua_ring = true,
+                        1 => c.field.ingrain = true,
+                        2 => c.field.defender_leech_seed = true,
+                        3 => c.field.defender_nightmare = true,
+                        4 => c.field.defender_curse = true,
+                        5 => c.field.defender_binding = true,
+                        6 => {
+                            c.field.defender_aqua_ring = true;
+                            c.field.ingrain = true;
+                            c.field.defender_leech_seed = true;
+                            c.field.defender_binding = true;
+                            c.field.weather = Weather::Sand;
+                            c.field.terrain = Terrain::Grassy;
+                            c.defender.status = StatusCondition::BadlyPoisoned;
+                            c.defender.toxic_counter = 2;
+                        }
+                        7 => c.field.defender_side.spikes = 3,
+                        _ => c.field.defender_sea_of_fire = true,
+                    }
+                    cases.push(c);
+                }
+            }
+        }
+    }
+    let multi_hit_cases = cases
+        .iter()
+        .filter(|c| c.move_.name == "Seismic Toss")
+        .cloned()
+        .map(|mut c| {
+            c.move_ = damage_calc::data::champions::champions_reference_move("Double Hit")
+                .unwrap()
+                .move_();
+            c.move_.hits = 2;
+            c.defender.max_hp_override = Some(160);
+            c.defender.current_hp = Some(160);
+            c
+        })
+        .collect::<Vec<_>>();
+    cases.extend(multi_hit_cases);
+    let boundaries = cases
+        .iter()
+        .filter(|c| c.move_.name == "Seismic Toss")
+        .cloned()
+        .collect::<Vec<_>>();
+    for c in boundaries {
+        for hp in [113, 129, 160] {
+            let mut c = c.clone();
+            c.defender.max_hp_override = Some(hp);
+            c.defender.current_hp = Some(hp);
+            cases.push(c);
+        }
+    }
+    for ability in [Ability::None, Ability::MagicGuard, Ability::Comatose] {
+        for status in [StatusCondition::Healthy, StatusCondition::Asleep] {
+            let mut c = update_case("Seismic Toss");
+            c.attacker.ability = Ability::BadDreams;
+            c.defender.ability = ability;
+            c.defender.status = status;
+            c.defender.max_hp_override = Some(113);
+            c.defender.current_hp = Some(113);
+            cases.push(c);
+        }
+    }
+    assert_update_cases(cases, true);
+}

@@ -1,5 +1,12 @@
 # Champions Porting Plan: One Month to Measurable Parity
 
+## September 2026 reference update
+
+The current pin is `1369b359b85f0a6343df006acde92cc4a7d07805` (Regulation M-C).
+See [the update audit](tools/reference/UPSTREAM_UPDATE.md) for implemented changes,
+regression coverage, and preserved upstream behavior. The month-long plan and
+July completion figures below are historical, not the current inventory.
+
 ## Objective
 
 Reach **100% behavior parity for the VGC 2026 Pokemon Champions, Regulation

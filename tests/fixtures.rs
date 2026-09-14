@@ -2684,14 +2684,14 @@ fn pinned_reference_inventory_is_complete_and_battle_ready() {
         CHAMPIONS_REFERENCE_SPECIES,
     };
 
-    assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 315);
-    assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 496);
+    assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 346);
+    assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 511);
     assert_eq!(
         damage_calc::data::champions::CHAMPIONS_REFERENCE_ITEM_VALUES.len(),
-        148
+        166
     );
-    assert_eq!(CHAMPIONS_REFERENCE_ABILITIES.len(), 201);
-    assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 123);
+    assert_eq!(CHAMPIONS_REFERENCE_ABILITIES.len(), 216);
+    assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 151);
 
     for set in CHAMPIONS_REFERENCE_SETS {
         let pokemon = set
@@ -3177,5 +3177,80 @@ fn aura_guard_halves_contact_damage_and_can_be_bypassed() {
     assert_eq!(
         calc(attacker, defender, move_, Field::default()).damage_rolls,
         baseline.damage_rolls
+    );
+}
+
+#[test]
+fn sticky_barb_residual_stops_after_itemless_contact_or_magic_guard() {
+    let mut attacker = stat_100_mon("Attacker", PokemonType::Normal);
+    let mut defender = stat_100_mon("Defender", PokemonType::Psychic);
+    defender.max_hp_override = Some(128);
+    defender.current_hp = Some(128);
+    defender.item = Item::StickyBarb;
+    let move_ = Move::new("Night Shade", 1, PokemonType::Ghost, Category::Special);
+    let barb = calc(
+        attacker.clone(),
+        defender.clone(),
+        move_.clone(),
+        Field::default(),
+    );
+    assert_eq!(barb.damage_rolls, vec![50]);
+    assert_eq!(barb.ko_chance_by_move_use, vec![0.0, 1.0, 1.0, 1.0]);
+
+    let mut contact = move_.clone();
+    contact.makes_contact = true;
+    let transferred = calc(
+        attacker.clone(),
+        defender.clone(),
+        contact.clone(),
+        Field::default(),
+    );
+    assert_eq!(transferred.ko_chance_by_move_use, vec![0.0, 0.0, 1.0, 1.0]);
+    attacker.item = Item::Leftovers;
+    let retained = calc(
+        attacker.clone(),
+        defender.clone(),
+        contact,
+        Field::default(),
+    );
+    assert_eq!(retained.ko_chance_by_move_use, barb.ko_chance_by_move_use);
+    defender.ability = Ability::MagicGuard;
+    let guarded = calc(attacker, defender, move_, Field::default());
+    assert_eq!(
+        guarded.ko_chance_by_move_use,
+        transferred.ko_chance_by_move_use
+    );
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn upstream_update_fields_default_when_reading_older_json() {
+    let mut field = serde_json::to_value(Field::default()).unwrap();
+    for name in [
+        "defender_aqua_ring",
+        "ingrain",
+        "defender_nightmare",
+        "defender_curse",
+        "defender_binding",
+        "defender_sea_of_fire",
+    ] {
+        field.as_object_mut().unwrap().remove(name);
+    }
+    assert_eq!(
+        serde_json::from_value::<Field>(field).unwrap(),
+        Field::default()
+    );
+    let attacker = stat_100_mon("Attacker", PokemonType::Normal);
+    let result = calc(
+        attacker.clone(),
+        attacker,
+        Move::new("Tackle", 40, PokemonType::Normal, Category::Physical),
+        Field::default(),
+    );
+    let mut json = serde_json::to_value(&result).unwrap();
+    json.as_object_mut().unwrap().remove("attacker_hp_effects");
+    assert_eq!(
+        serde_json::from_value::<damage_calc::DamageResult>(json).unwrap(),
+        result
     );
 }

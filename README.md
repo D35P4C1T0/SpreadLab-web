@@ -10,9 +10,9 @@ especially integer floors, Game Freak rounding, and modifier chaining.
 
 ## Status
 
-**100% parity for the pinned VGC 2026 Champions Regulation M-B normal-dex
-scope.** The parity baseline is upstream commit
-`dfbf020d4ed7df8921c6e11bbaa23410f6ca1448`.
+**Updated to the pinned VGC 2026 Champions Regulation M-C normal-dex
+calculator.** The reference baseline is upstream commit
+`1369b359b85f0a6343df006acde92cc4a7d07805`.
 
 The suite executes the pinned JavaScript engine and compares more than 18,000
 generated partitions covering every active move, bundled set, ability and item
@@ -21,8 +21,24 @@ multi-hit recalculation, counter moves, and KO probabilities. Source hashes,
 exact inventories, and all 97 relevant reference functions are checked in CI;
 current unexplained mismatch count is zero.
 
-This claim excludes legacy generations, Champions NatDex, Legends Z-A, and
+This scope excludes legacy generations, Champions NatDex, Legends Z-A, and
 browser presentation. See [Scope Boundary](#scope-boundary).
+
+The September update includes contact-only Protect quartering, Terrain Pulse
+grounding, Gyro Ball and Pain Split rounding, special-only Plus/Minus, and
+critical-hit handling for Meteor Beam/Electro Shot. Eelevate's airborne checks,
+Mega Sol's Weather Ball boost, Libero STAB, and Grassy/Psychic Surge terrain
+setup are covered as well.
+
+`Field` now accepts `defender_aqua_ring`, `ingrain`, `defender_nightmare`,
+`defender_curse`, `defender_binding`, and `defender_sea_of_fire`, alongside
+`defender_leech_seed`. KO projection follows upstream's ordered residual effects
+and berry activation rules. `DamageResult.attacker_hp_effects` reports the
+independent Pain Split and Leech Seed HP changes for the attacker, including
+Big Root and Liquid Ooze; it is not a total recoil/drain result.
+
+Compatibility details and the upstream Sticky Barb exception are recorded in
+[the reference update notes](tools/reference/UPSTREAM_UPDATE.md).
 
 ## Example
 
@@ -122,9 +138,9 @@ assert_eq!(body_slam.name, "Body Slam");
 assert_eq!(venusaur.name, "Venusaur");
 assert_eq!(pokemon.name, "Venusaur");
 assert_eq!(moves.len(), 4);
-assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 315);
-assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 496);
-assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 123);
+assert_eq!(CHAMPIONS_REFERENCE_SPECIES.len(), 346);
+assert_eq!(CHAMPIONS_REFERENCE_MOVES.len(), 511);
+assert_eq!(CHAMPIONS_REFERENCE_SETS.len(), 151);
 ```
 
 For richer imports, `damage_calc::data::CHAMPIONS_DATA_JSON` still exposes the
@@ -208,8 +224,8 @@ Implemented and covered by tests:
 - burn, Reflect, Light Screen, Aurora Veil
 - Stealth Rock, one-to-three Spikes layers, Salt Cure, initial toxic counter,
   healing suppression/removal, and reference-ordered end-of-turn KO projection
-- exact typed inventories for 315 Pokemon/forms, 496 moves, 148 items, 201
-  unique abilities, and 123 bundled sets
+- exact typed inventories for 346 Pokemon/forms, 511 moves, 166 items, 216
+  unique abilities, and 151 bundled sets
 - one-move and two-direction four-move calculation APIs, with entry
   preprocessing applied once
 - semantic result metadata for resolved move state, outcome kind, and signed
@@ -220,7 +236,7 @@ pinned Node oracle live in `tests/reference_oracle.rs` and `tools/reference/`.
 
 ## Scope Boundary
 
-Parity covers generation-10 Regulation M-B normal dex and semantic library
+Parity covers generation-10 Regulation M-C normal dex and semantic library
 results. It does not claim parity for:
 
 - HTML/CSS/JQuery behavior, DOM description strings, local storage, audio, or

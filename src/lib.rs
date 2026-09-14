@@ -14,8 +14,8 @@ pub mod stats;
 pub mod types;
 
 pub use damage::{
-    calculate_all_moves, calculate_damage, BatchCalcInput, BatchDamageResult, CalcInput,
-    DamageOutcome, DamageResult, ModifierBreakdown, ResolvedMove,
+    calculate_all_moves, calculate_damage, AttackerHpEffects, BatchCalcInput, BatchDamageResult,
+    CalcInput, DamageOutcome, DamageResult, ModifierBreakdown, ResolvedMove,
 };
 pub use stats::{calculate_hp, calculate_non_hp_stat, calculate_stats};
 pub use types::{

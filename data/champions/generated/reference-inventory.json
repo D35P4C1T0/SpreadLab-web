@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "dfbf020d4ed7df8921c6e11bbaa23410f6ca1448",
+  "sourceCommit": "1369b359b85f0a6343df006acde92cc4a7d07805",
   "pokemon": [
     {
       "name": "Venusaur",
@@ -1047,7 +1047,8 @@
       "ab": "Pressure",
       "formes": [
         "Absol",
-        "Mega Absol"
+        "Mega Absol",
+        "Mega Absol Z"
       ]
     },
     {
@@ -1220,7 +1221,8 @@
       "ab": "Rough Skin",
       "formes": [
         "Garchomp",
-        "Mega Garchomp"
+        "Mega Garchomp",
+        "Mega Garchomp Z"
       ]
     },
     {
@@ -1239,7 +1241,8 @@
       "ab": "Inner Focus",
       "formes": [
         "Lucario",
-        "Mega Lucario"
+        "Mega Lucario",
+        "Mega Lucario Z"
       ]
     },
     {
@@ -3980,8 +3983,8 @@
     },
     {
       "name": "Mega Chandelure",
-      "t1": "Fire",
-      "t2": "Ghost",
+      "t1": "Ghost",
+      "t2": "Fire",
       "bs": {
         "hp": 60,
         "at": 75,
@@ -5044,6 +5047,479 @@
       "w": 99,
       "ab": "Defiant",
       "isAlternateForme": true
+    },
+    {
+      "name": "Wigglytuff",
+      "t1": "Normal",
+      "bs": {
+        "hp": 140,
+        "at": 70,
+        "df": 45,
+        "sa": 85,
+        "sd": 50,
+        "sp": 45,
+        "sl": 50
+      },
+      "w": 12,
+      "ab": "Competitive",
+      "t2": "Fairy"
+    },
+    {
+      "name": "Persian",
+      "t1": "Normal",
+      "bs": {
+        "hp": 65,
+        "at": 70,
+        "df": 60,
+        "sa": 65,
+        "sd": 65,
+        "sp": 115,
+        "sl": 65
+      },
+      "w": 32,
+      "ab": "Limber"
+    },
+    {
+      "name": "Farfetch'd",
+      "t1": "Normal",
+      "t2": "Flying",
+      "bs": {
+        "hp": 52,
+        "at": 90,
+        "df": 55,
+        "sa": 58,
+        "sd": 62,
+        "sp": 60,
+        "sl": 58
+      },
+      "w": 15,
+      "ab": "Inner Focus"
+    },
+    {
+      "name": "Mr. Mime",
+      "t1": "Psychic",
+      "bs": {
+        "hp": 40,
+        "at": 45,
+        "df": 65,
+        "sa": 100,
+        "sd": 120,
+        "sp": 90,
+        "sl": 100
+      },
+      "w": 54.5,
+      "ab": "Soundproof",
+      "t2": "Fairy"
+    },
+    {
+      "name": "Swalot",
+      "t1": "Poison",
+      "bs": {
+        "hp": 100,
+        "at": 73,
+        "df": 83,
+        "sa": 73,
+        "sd": 83,
+        "sp": 55
+      },
+      "w": 80,
+      "ab": "Sticky Hold"
+    },
+    {
+      "name": "Salamence",
+      "t1": "Dragon",
+      "t2": "Flying",
+      "bs": {
+        "hp": 95,
+        "at": 135,
+        "df": 80,
+        "sa": 110,
+        "sd": 80,
+        "sp": 100
+      },
+      "w": 102.6,
+      "ab": "Intimidate",
+      "formes": [
+        "Salamence",
+        "Mega Salamence"
+      ]
+    },
+    {
+      "name": "Gogoat",
+      "t1": "Grass",
+      "bs": {
+        "hp": 123,
+        "at": 100,
+        "df": 62,
+        "sa": 97,
+        "sd": 81,
+        "sp": 68
+      },
+      "w": 91,
+      "ab": "Sap Sipper"
+    },
+    {
+      "name": "Golisopod",
+      "t1": "Bug",
+      "t2": "Water",
+      "bs": {
+        "hp": 75,
+        "at": 125,
+        "df": 140,
+        "sa": 60,
+        "sd": 90,
+        "sp": 40
+      },
+      "w": 108,
+      "ab": "Emergency Exit",
+      "formes": [
+        "Golisopod",
+        "Mega Golisopod"
+      ]
+    },
+    {
+      "name": "Rillaboom",
+      "t1": "Grass",
+      "bs": {
+        "hp": 100,
+        "at": 125,
+        "df": 90,
+        "sa": 60,
+        "sd": 70,
+        "sp": 85
+      },
+      "w": 90,
+      "ab": "Grassy Surge"
+    },
+    {
+      "name": "Cinderace",
+      "t1": "Fire",
+      "bs": {
+        "hp": 80,
+        "at": 116,
+        "df": 75,
+        "sa": 65,
+        "sd": 75,
+        "sp": 119
+      },
+      "w": 33,
+      "ab": "Libero"
+    },
+    {
+      "name": "Inteleon",
+      "t1": "Water",
+      "bs": {
+        "hp": 70,
+        "at": 85,
+        "df": 65,
+        "sa": 125,
+        "sd": 65,
+        "sp": 120
+      },
+      "w": 45.2,
+      "ab": "Sniper"
+    },
+    {
+      "name": "Thievul",
+      "t1": "Dark",
+      "bs": {
+        "hp": 70,
+        "at": 58,
+        "df": 58,
+        "sa": 87,
+        "sd": 92,
+        "sp": 90
+      },
+      "w": 19.9,
+      "ab": "Unburden"
+    },
+    {
+      "name": "Toxtricity",
+      "t1": "Electric",
+      "t2": "Poison",
+      "bs": {
+        "hp": 75,
+        "at": 98,
+        "df": 70,
+        "sa": 114,
+        "sd": 70,
+        "sp": 75
+      },
+      "w": 40,
+      "ab": "Punk Rock"
+    },
+    {
+      "name": "Grapploct",
+      "t1": "Fighting",
+      "bs": {
+        "hp": 80,
+        "at": 118,
+        "df": 90,
+        "sa": 70,
+        "sd": 80,
+        "sp": 42
+      },
+      "w": 39,
+      "ab": "Technician"
+    },
+    {
+      "name": "Perrserker",
+      "t1": "Steel",
+      "bs": {
+        "hp": 70,
+        "at": 110,
+        "df": 100,
+        "sa": 50,
+        "sd": 60,
+        "sp": 50
+      },
+      "w": 28,
+      "ab": "Steely Spirit"
+    },
+    {
+      "name": "Sirfetch'd",
+      "t1": "Fighting",
+      "bs": {
+        "hp": 62,
+        "at": 135,
+        "df": 95,
+        "sa": 68,
+        "sd": 82,
+        "sp": 65
+      },
+      "w": 117,
+      "ab": "Scrappy"
+    },
+    {
+      "name": "Pincurchin",
+      "t1": "Electric",
+      "bs": {
+        "hp": 48,
+        "at": 101,
+        "df": 95,
+        "sa": 91,
+        "sd": 85,
+        "sp": 15
+      },
+      "w": 1,
+      "ab": "Electric Surge"
+    },
+    {
+      "name": "Indeedee",
+      "t1": "Psychic",
+      "t2": "Normal",
+      "bs": {
+        "hp": 60,
+        "at": 65,
+        "df": 55,
+        "sa": 105,
+        "sd": 95,
+        "sp": 95
+      },
+      "w": 28,
+      "ab": "Psychic Surge"
+    },
+    {
+      "name": "Pawmot",
+      "t1": "Electric",
+      "t2": "Fighting",
+      "bs": {
+        "hp": 70,
+        "at": 115,
+        "df": 70,
+        "sa": 70,
+        "sd": 60,
+        "sp": 105
+      },
+      "w": 41,
+      "ab": "Iron Fist"
+    },
+    {
+      "name": "Arboliva",
+      "t1": "Grass",
+      "t2": "Normal",
+      "bs": {
+        "hp": 78,
+        "at": 69,
+        "df": 90,
+        "sa": 125,
+        "sd": 109,
+        "sp": 39
+      },
+      "w": 48.2,
+      "ab": "Seed Sower"
+    },
+    {
+      "name": "Squawkabilly",
+      "t1": "Normal",
+      "t2": "Flying",
+      "bs": {
+        "hp": 82,
+        "at": 96,
+        "df": 51,
+        "sa": 45,
+        "sd": 51,
+        "sp": 92
+      },
+      "w": 2.4,
+      "ab": "Intimidate"
+    },
+    {
+      "name": "Mabosstiff",
+      "t1": "Dark",
+      "bs": {
+        "hp": 80,
+        "at": 120,
+        "df": 90,
+        "sa": 60,
+        "sd": 70,
+        "sp": 85
+      },
+      "w": 61,
+      "ab": "Intimidate"
+    },
+    {
+      "name": "Baxcalibur",
+      "t1": "Dragon",
+      "t2": "Ice",
+      "bs": {
+        "hp": 115,
+        "at": 145,
+        "df": 92,
+        "sa": 75,
+        "sd": 86,
+        "sp": 87
+      },
+      "w": 210,
+      "ab": "Thermal Exchange",
+      "formes": [
+        "Baxcalibur",
+        "Mega Baxcalibur"
+      ]
+    },
+    {
+      "name": "Persian-Alola",
+      "t1": "Dark",
+      "bs": {
+        "hp": 65,
+        "at": 60,
+        "df": 60,
+        "sa": 75,
+        "sd": 65,
+        "sp": 115
+      },
+      "w": 33,
+      "ab": "Fur Coat"
+    },
+    {
+      "name": "Mega Absol Z",
+      "t1": "Dark",
+      "t2": "Ghost",
+      "bs": {
+        "hp": 65,
+        "at": 154,
+        "df": 60,
+        "sa": 75,
+        "sd": 60,
+        "sp": 151
+      },
+      "w": 49,
+      "ab": "Sharpness",
+      "isAlternateForme": true
+    },
+    {
+      "name": "Mega Salamence",
+      "t1": "Dragon",
+      "t2": "Flying",
+      "bs": {
+        "hp": 95,
+        "at": 145,
+        "df": 130,
+        "sa": 120,
+        "sd": 90,
+        "sp": 120
+      },
+      "w": 112.6,
+      "ab": "Aerilate",
+      "isAlternateForme": true
+    },
+    {
+      "name": "Mega Garchomp Z",
+      "t1": "Dragon",
+      "bs": {
+        "hp": 108,
+        "at": 130,
+        "df": 85,
+        "sa": 141,
+        "sd": 85,
+        "sp": 151
+      },
+      "w": 99,
+      "ab": "Levitate",
+      "isAlternateForme": true
+    },
+    {
+      "name": "Mega Lucario Z",
+      "t1": "Fighting",
+      "t2": "Steel",
+      "bs": {
+        "hp": 70,
+        "at": 100,
+        "df": 70,
+        "sa": 164,
+        "sd": 70,
+        "sp": 151
+      },
+      "w": 49.4,
+      "ab": "Aura Guard",
+      "isAlternateForme": true
+    },
+    {
+      "name": "Mega Golisopod",
+      "t1": "Bug",
+      "t2": "Steel",
+      "bs": {
+        "hp": 75,
+        "at": 150,
+        "df": 175,
+        "sa": 70,
+        "sd": 120,
+        "sp": 40
+      },
+      "w": 148,
+      "ab": "Tough Claws",
+      "isAlternateForme": true
+    },
+    {
+      "name": "Indeedee-F",
+      "t1": "Psychic",
+      "t2": "Normal",
+      "bs": {
+        "hp": 70,
+        "at": 55,
+        "df": 65,
+        "sa": 95,
+        "sd": 105,
+        "sp": 85
+      },
+      "w": 28,
+      "ab": "Psychic Surge"
+    },
+    {
+      "name": "Mega Baxcalibur",
+      "t1": "Dragon",
+      "t2": "Ice",
+      "bs": {
+        "hp": 115,
+        "at": 175,
+        "df": 117,
+        "sa": 105,
+        "sd": 101,
+        "sp": 87
+      },
+      "w": 315,
+      "ab": "Thermal Exchange",
+      "isAlternateForme": true
     }
   ],
   "moves": [
@@ -5957,6 +6433,7 @@
       "bp": 80,
       "type": "Psychic",
       "category": "Special",
+      "isSound": true,
       "hasSecondaryEffect": true
     },
     {
@@ -5982,7 +6459,7 @@
       "bp": 130,
       "type": "Electric",
       "category": "Special",
-      "hasSecondaryEffect": true
+      "hasSecondaryEffect": false
     },
     {
       "name": "Electroweb",
@@ -6314,7 +6791,7 @@
       "bp": 70,
       "type": "Ice",
       "category": "Special",
-      "hasSecondaryEffect": true
+      "hasSecondaryEffect": false
     },
     {
       "name": "Frenzy Plant",
@@ -8566,6 +9043,105 @@
       "name": "Topsy-Turvy",
       "type": "Dark",
       "category": "Status"
+    },
+    {
+      "name": "Slash",
+      "bp": 80,
+      "type": "Normal",
+      "category": "Physical",
+      "makesContact": true,
+      "isSlice": true
+    },
+    {
+      "name": "Milk Drink",
+      "type": "Normal",
+      "category": "Status"
+    },
+    {
+      "name": "Shift Gear",
+      "type": "Steel",
+      "category": "Status"
+    },
+    {
+      "name": "Zing Zap",
+      "category": "Physical",
+      "type": "Electric",
+      "makesContact": true,
+      "bp": 80,
+      "hasSecondaryEffect": true
+    },
+    {
+      "name": "Snipe Shot",
+      "bp": 85,
+      "type": "Water",
+      "category": "Special"
+    },
+    {
+      "name": "Jaw Lock",
+      "bp": 80,
+      "type": "Dark",
+      "category": "Physical",
+      "makesContact": true,
+      "isBite": true
+    },
+    {
+      "name": "Octolock",
+      "type": "Fighting",
+      "category": "Status"
+    },
+    {
+      "name": "Court Change",
+      "type": "Normal",
+      "category": "Status"
+    },
+    {
+      "name": "Drum Beating",
+      "bp": 80,
+      "type": "Grass",
+      "category": "Physical",
+      "hasSecondaryEffect": true
+    },
+    {
+      "name": "Pyro Ball",
+      "bp": 120,
+      "type": "Fire",
+      "category": "Physical",
+      "hasSecondaryEffect": true,
+      "isBullet": true
+    },
+    {
+      "name": "Overdrive",
+      "bp": 80,
+      "type": "Electric",
+      "category": "Special",
+      "isSound": true,
+      "isSpread": true
+    },
+    {
+      "name": "Meteor Assault",
+      "bp": 170,
+      "type": "Fighting",
+      "category": "Physical"
+    },
+    {
+      "name": "Glaive Rush",
+      "bp": 120,
+      "type": "Dragon",
+      "category": "Physical",
+      "makesContact": true
+    },
+    {
+      "name": "Revival Blessing",
+      "type": "Normal",
+      "category": "Status"
+    },
+    {
+      "name": "Double Shock",
+      "bp": 120,
+      "type": "Electric",
+      "category": "Physical",
+      "makesContact": true,
+      "isPunch": true
     }
   ],
   "items": [
@@ -8716,7 +9292,25 @@
     "Pyroarite",
     "Malamarite",
     "Barbaracite",
-    "Dragalgite"
+    "Dragalgite",
+    "Leek",
+    "Rocky Helmet",
+    "Air Balloon",
+    "Red Card",
+    "Binding Band",
+    "Eject Button",
+    "Normal Gem",
+    "Salamencite",
+    "Terrain Extender",
+    "Electric Seed",
+    "Psychic Seed",
+    "Misty Seed",
+    "Grassy Seed",
+    "Absolite Z",
+    "Garchompite Z",
+    "Lucarionite Z",
+    "Golisopite",
+    "Baxcalibrite"
   ],
   "abilities": [
     "Adaptability",
@@ -8919,11 +9513,24 @@
     "Fire Mane",
     "Fluffy",
     "Forewarn",
-    "Good as Gold"
+    "Good as Gold",
+    "Run Away",
+    "Liquid Ooze",
+    "Rattled",
+    "Grass Pelt",
+    "Emergency Exit",
+    "Stakeout",
+    "Psychic Surge",
+    "Grassy Surge",
+    "Libero",
+    "Punk Rock",
+    "Steely Spirit",
+    "Seed Sower",
+    "Thermal Exchange",
+    "Guard Dog",
+    "Aura Guard"
   ],
-  "duplicateAbilities": [
-    "Huge Power"
-  ],
+  "duplicateAbilities": [],
   "sets": [
     {
       "pokemon": "Venusaur",
@@ -8985,6 +9592,26 @@
         "Heat Wave",
         "Weather Ball",
         "Solar Beam",
+        "Ancient Power"
+      ]
+    },
+    {
+      "pokemon": "Charizard",
+      "name": "Physically Bulky Mega Y",
+      "sps": {
+        "hp": 32,
+        "at": 0,
+        "df": 32,
+        "sa": 1,
+        "sd": 0,
+        "sp": 1
+      },
+      "nature": "Modest",
+      "item": "Charizardite Y",
+      "moves": [
+        "Heat Wave",
+        "Weather Ball",
+        "Solar Beam",
         "Air Slash"
       ]
     },
@@ -9011,7 +9638,7 @@
     },
     {
       "pokemon": "Blastoise",
-      "name": "Mega Attacker under Tailwind",
+      "name": "Fast Mega Attacker",
       "sps": {
         "hp": 2,
         "at": 0,
@@ -9025,9 +9652,70 @@
       "item": "Blastoisinite",
       "moves": [
         "Water Spout",
-        "Aura Sphere",
         "Dark Pulse",
+        "Aura Sphere",
         "Ice Beam"
+      ]
+    },
+    {
+      "pokemon": "Blastoise",
+      "name": "Trick Room Mega Offense",
+      "sps": {
+        "hp": 32,
+        "at": 0,
+        "df": 0,
+        "sa": 32,
+        "sd": 2,
+        "sp": 0
+      },
+      "nature": "Quiet",
+      "ability": "Rain Dish",
+      "item": "Blastoisinite",
+      "moves": [
+        "Water Spout",
+        "Dark Pulse",
+        "Ice Beam",
+        "Fake Out"
+      ]
+    },
+    {
+      "pokemon": "Beedrill",
+      "name": "Adamant Coverage Mega",
+      "sps": {
+        "hp": 0,
+        "at": 30,
+        "df": 5,
+        "sa": 0,
+        "sd": 0,
+        "sp": 31
+      },
+      "nature": "Adamant",
+      "item": "Beedrillite",
+      "moves": [
+        "Poison Jab",
+        "U-turn",
+        "Drill Run",
+        "Knock Off"
+      ]
+    },
+    {
+      "pokemon": "Pidgeot",
+      "name": "Offense Tailwind Mega",
+      "sps": {
+        "hp": 1,
+        "at": 0,
+        "df": 0,
+        "sa": 32,
+        "sd": 1,
+        "sp": 32
+      },
+      "nature": "Timid",
+      "item": "Pidgeotite",
+      "moves": [
+        "Hurricane",
+        "Heat Wave",
+        "Hyper Beam",
+        "Tailwind"
       ]
     },
     {
@@ -9211,22 +9899,22 @@
     },
     {
       "pokemon": "Kangaskhan",
-      "name": "Bulky Max Attack Mega",
+      "name": "Trick Room Max Attack Mega",
       "sps": {
         "hp": 32,
         "at": 32,
         "df": 0,
         "sa": 0,
-        "sd": 0,
-        "sp": 2
+        "sd": 2,
+        "sp": 0
       },
-      "nature": "Adamant",
+      "nature": "Brave",
       "item": "Kangaskhanite",
       "moves": [
         "Fake Out",
         "Double-Edge",
-        "Sucker Punch",
-        "Drain Punch"
+        "Hammer Arm",
+        "Ice Punch"
       ]
     },
     {
@@ -9648,7 +10336,7 @@
       "moves": [
         "Hyper Voice",
         "Psyshock",
-        "Psychic",
+        "Expanding Force",
         "Trick Room"
       ]
     },
@@ -9753,6 +10441,27 @@
       ]
     },
     {
+      "pokemon": "Absol",
+      "name": "Mega Z Offense",
+      "sps": {
+        "hp": 2,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "ability": "Justified",
+      "item": "Absolite Z",
+      "moves": [
+        "Night Slash",
+        "Shadow Claw",
+        "Close Combat",
+        "Psycho Cut"
+      ]
+    },
+    {
       "pokemon": "Garchomp",
       "name": "Scarf Offense",
       "sps": {
@@ -9790,6 +10499,86 @@
         "Dragon Claw",
         "Rock Slide",
         "Stomping Tantrum"
+      ]
+    },
+    {
+      "pokemon": "Garchomp",
+      "name": "cona's Worlds 2nd Max Speed Sitrus",
+      "sps": {
+        "hp": 21,
+        "at": 7,
+        "df": 6,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "item": "Sitrus Berry",
+      "moves": [
+        "Earthquake",
+        "Dragon Claw",
+        "Rock Slide",
+        "Protect"
+      ]
+    },
+    {
+      "pokemon": "Garchomp",
+      "name": "Mega for Both Offense and Bulk",
+      "sps": {
+        "hp": 22,
+        "at": 21,
+        "df": 3,
+        "sa": 0,
+        "sd": 1,
+        "sp": 19
+      },
+      "nature": "Adamant",
+      "item": "Garchompite",
+      "moves": [
+        "Earthquake",
+        "Dragon Claw",
+        "Rock Slide",
+        "Stomping Tantrum"
+      ]
+    },
+    {
+      "pokemon": "Garchomp",
+      "name": "Mega Z Draco + Pulse + Coverage",
+      "sps": {
+        "hp": 2,
+        "at": 0,
+        "df": 0,
+        "sa": 32,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Modest",
+      "item": "Garchompite Z",
+      "moves": [
+        "Draco Meteor",
+        "Dragon Pulse",
+        "Flamethrower",
+        "Power Gem"
+      ]
+    },
+    {
+      "pokemon": "Lucario",
+      "name": "Mega Z Calm Mind Bulk",
+      "sps": {
+        "hp": 31,
+        "at": 0,
+        "df": 2,
+        "sa": 8,
+        "sd": 6,
+        "sp": 19
+      },
+      "nature": "Timid",
+      "item": "Lucarionite Z",
+      "moves": [
+        "Dark Pulse",
+        "Aura Sphere",
+        "Flash Cannon",
+        "Calm Mind"
       ]
     },
     {
@@ -10076,6 +10865,46 @@
       ]
     },
     {
+      "pokemon": "Volcarona",
+      "name": "Grassy Seed Quiver Dance",
+      "sps": {
+        "hp": 19,
+        "at": 0,
+        "df": 13,
+        "sa": 5,
+        "sd": 1,
+        "sp": 28
+      },
+      "nature": "Modest",
+      "item": "Grassy Seed",
+      "moves": [
+        "Heat Wave",
+        "Giga Drain",
+        "Fiery Dance",
+        "Quiver Dance"
+      ]
+    },
+    {
+      "pokemon": "Volcarona",
+      "name": "Rocky Helmet Support",
+      "sps": {
+        "hp": 32,
+        "at": 0,
+        "df": 32,
+        "sa": 0,
+        "sd": 2,
+        "sp": 0
+      },
+      "nature": "Bold",
+      "item": "Rocky Helmet",
+      "moves": [
+        "Overheat",
+        "Struggle Bug",
+        "Rage Powder",
+        "Tailwind"
+      ]
+    },
+    {
       "pokemon": "Delphox",
       "name": "Fast Offensive Mega",
       "sps": {
@@ -10318,6 +11147,26 @@
       ]
     },
     {
+      "pokemon": "Incineroar",
+      "name": "Trick Room Offense",
+      "sps": {
+        "hp": 29,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 5,
+        "sp": 0
+      },
+      "nature": "Brave",
+      "item": "Life Orb",
+      "moves": [
+        "Flare Blitz",
+        "Darkest Lariat",
+        "Close Combat",
+        "Fake Out"
+      ]
+    },
+    {
       "pokemon": "Primarina",
       "name": "Mystic Water Offense",
       "sps": {
@@ -10419,7 +11268,7 @@
     },
     {
       "pokemon": "Hatterene",
-      "name": "Fairy Feather Trick Room",
+      "name": "Life Orb Trick Room",
       "sps": {
         "hp": 32,
         "at": 0,
@@ -10429,11 +11278,11 @@
         "sp": 0
       },
       "nature": "Quiet",
-      "item": "Fairy Feather",
+      "item": "Life Orb",
       "moves": [
-        "Psychic",
+        "Psyshock",
         "Dazzling Gleam",
-        "Mystical Fire",
+        "Expanding Force",
         "Trick Room"
       ]
     },
@@ -10622,6 +11471,47 @@
       ]
     },
     {
+      "pokemon": "Sneasler",
+      "name": "Psychic Seed Offense",
+      "sps": {
+        "hp": 0,
+        "at": 27,
+        "df": 0,
+        "sa": 0,
+        "sd": 7,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "item": "Psychic Seed",
+      "moves": [
+        "Dire Claw",
+        "Close Combat",
+        "Throat Chop",
+        "Rock Slide"
+      ]
+    },
+    {
+      "pokemon": "Sneasler",
+      "name": "Poison Touch Sash",
+      "sps": {
+        "hp": 2,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "ability": "Poison Touch",
+      "item": "Focus Sash",
+      "moves": [
+        "Close Combat",
+        "Poison Jab",
+        "Fake Out",
+        "Feint"
+      ]
+    },
+    {
       "pokemon": "Maushold",
       "name": "Chople Support",
       "sps": {
@@ -10643,6 +11533,26 @@
       ]
     },
     {
+      "pokemon": "Maushold",
+      "name": "Technician Offense",
+      "sps": {
+        "hp": 2,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "item": "Wide Lens",
+      "moves": [
+        "Population Bomb",
+        "Bite",
+        "Feint",
+        "Follow Me"
+      ]
+    },
+    {
       "pokemon": "Maushold-Four",
       "name": "Chople Support",
       "sps": {
@@ -10661,6 +11571,46 @@
         "Feint",
         "Follow Me",
         "Taunt"
+      ]
+    },
+    {
+      "pokemon": "Maushold-Four",
+      "name": "Technician Offense",
+      "sps": {
+        "hp": 2,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "item": "Wide Lens",
+      "moves": [
+        "Population Bomb",
+        "Bite",
+        "Feint",
+        "Follow Me"
+      ]
+    },
+    {
+      "pokemon": "Armarouge",
+      "name": "Psyspam Trick Room",
+      "sps": {
+        "hp": 29,
+        "at": 0,
+        "df": 0,
+        "sa": 32,
+        "sd": 5,
+        "sp": 0
+      },
+      "nature": "Quiet",
+      "item": "Life Orb",
+      "moves": [
+        "Armor Cannon",
+        "Expanding Force",
+        "Heat Wave",
+        "Trick Room"
       ]
     },
     {
@@ -10859,6 +11809,26 @@
       },
       "nature": "Adamant",
       "item": "Focus Sash",
+      "moves": [
+        "Kowtow Cleave",
+        "Iron Head",
+        "Sucker Punch",
+        "Low Kick"
+      ]
+    },
+    {
+      "pokemon": "Kingambit",
+      "name": "natsumewato's Worlds 1st Chople",
+      "sps": {
+        "hp": 32,
+        "at": 15,
+        "df": 0,
+        "sa": 0,
+        "sd": 19,
+        "sp": 0
+      },
+      "nature": "Adamant",
+      "item": "Chople Berry",
       "moves": [
         "Kowtow Cleave",
         "Iron Head",
@@ -11407,14 +12377,214 @@
         "Power Gem",
         "Steel Beam"
       ]
+    },
+    {
+      "pokemon": "Salamence",
+      "name": "Mixed Offense Mega",
+      "sps": {
+        "hp": 2,
+        "at": 0,
+        "df": 0,
+        "sa": 32,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Timid",
+      "item": "Salamencite",
+      "moves": [
+        "Double-Edge",
+        "Hyper Voice",
+        "Draco Meteor",
+        "Flamethrower"
+      ]
+    },
+    {
+      "pokemon": "Golisopod",
+      "name": "TR Offense Mega",
+      "sps": {
+        "hp": 32,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 2,
+        "sp": 0
+      },
+      "nature": "Brave",
+      "item": "Golisopite",
+      "moves": [
+        "Leech Life",
+        "Iron Head",
+        "First Impression",
+        "Sucker Punch"
+      ]
+    },
+    {
+      "pokemon": "Rillaboom",
+      "name": "Basic Miracle Seed",
+      "sps": {
+        "hp": 32,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 2,
+        "sp": 0
+      },
+      "nature": "Adamant",
+      "item": "Miracle Seed",
+      "moves": [
+        "Wood Hammer",
+        "Grassy Glide",
+        "High Horsepower",
+        "Fake Out"
+      ]
+    },
+    {
+      "pokemon": "Rillaboom",
+      "name": "Bulkier Sitrus Berry",
+      "sps": {
+        "hp": 32,
+        "at": 15,
+        "df": 0,
+        "sa": 0,
+        "sd": 19,
+        "sp": 0
+      },
+      "nature": "Adamant",
+      "item": "Sitrus Berry",
+      "moves": [
+        "Wood Hammer",
+        "Grassy Glide",
+        "U-turn",
+        "Fake Out"
+      ]
+    },
+    {
+      "pokemon": "Indeedee",
+      "name": "Scarf Offense",
+      "sps": {
+        "hp": 0,
+        "at": 0,
+        "df": 2,
+        "sa": 32,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Modest",
+      "item": "Choice Scarf",
+      "moves": [
+        "Expanding Force",
+        "Dazzling Gleam",
+        "Mystical Fire",
+        "Trick"
+      ]
+    },
+    {
+      "pokemon": "Indeedee",
+      "name": "Sash Imprison Trick Room",
+      "sps": {
+        "hp": 0,
+        "at": 0,
+        "df": 2,
+        "sa": 32,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Modest",
+      "item": "Focus Sash",
+      "moves": [
+        "Expanding Force",
+        "Hyper Voice",
+        "Imprison",
+        "Trick Room"
+      ]
+    },
+    {
+      "pokemon": "Indeedee-F",
+      "name": "Psychic Seed Support",
+      "sps": {
+        "hp": 32,
+        "at": 0,
+        "df": 32,
+        "sa": 0,
+        "sd": 2,
+        "sp": 0
+      },
+      "nature": "Relaxed",
+      "item": "Psychic Seed",
+      "moves": [
+        "Psychic",
+        "Terrain Pulse",
+        "Mystical Fire",
+        "Follow Me"
+      ]
+    },
+    {
+      "pokemon": "Pawmot",
+      "name": "Life Orb Offense",
+      "sps": {
+        "hp": 2,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "item": "Life Orb",
+      "moves": [
+        "Double Shock",
+        "Close Combat",
+        "Ice Punch",
+        "Fake Out"
+      ]
+    },
+    {
+      "pokemon": "Pawmot",
+      "name": "Sash Revival Blessing",
+      "sps": {
+        "hp": 2,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 0,
+        "sp": 32
+      },
+      "nature": "Jolly",
+      "item": "Focus Sash",
+      "moves": [
+        "Double Shock",
+        "Close Combat",
+        "Revival Blessing",
+        "Fake Out"
+      ]
+    },
+    {
+      "pokemon": "Baxcalibur",
+      "name": "Basic Mega Offense",
+      "sps": {
+        "hp": 32,
+        "at": 32,
+        "df": 0,
+        "sa": 0,
+        "sd": 2,
+        "sp": 0
+      },
+      "nature": "Adamant",
+      "item": "Baxcalibrite",
+      "moves": [
+        "Glaive Rush",
+        "Icicle Crash",
+        "Ice Shard",
+        "High Horsepower"
+      ]
     }
   ],
   "counts": {
-    "pokemon": 315,
-    "moves": 496,
-    "items": 148,
-    "abilities": 201,
-    "sets": 123,
-    "setPokemon": 77
+    "pokemon": 346,
+    "moves": 511,
+    "items": 166,
+    "abilities": 216,
+    "sets": 151,
+    "setPokemon": 90
   }
 }

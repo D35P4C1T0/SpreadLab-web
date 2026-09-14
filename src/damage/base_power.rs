@@ -21,7 +21,7 @@ pub(super) fn calc_base_power(
     let bp = match move_.name.as_str() {
         "Gyro Ball" => {
             let speed = attacker_speed.max(1);
-            let bp = (25 * defender_speed / speed).min(150);
+            let bp = (25 * u32::from(defender_speed) / u32::from(speed) + 1).min(150) as u16;
             modifiers.push(ModifierBreakdown::new("Gyro Ball base power", 0));
             bp
         }
@@ -176,7 +176,8 @@ pub(super) fn calc_base_power(
             bp
         }
         "Weather Ball"
-            if field.weather != Weather::None && field.weather != Weather::StrongWinds =>
+            if (field.weather != Weather::None && field.weather != Weather::StrongWinds)
+                || attacker.ability == crate::types::Ability::MegaSol =>
         {
             modifiers.push(ModifierBreakdown::new(
                 "Weather Ball base power",
@@ -184,7 +185,9 @@ pub(super) fn calc_base_power(
             ));
             move_.base_power * 2
         }
-        "Terrain Pulse" if field.terrain != crate::types::Terrain::None => {
+        "Terrain Pulse"
+            if field.terrain != crate::types::Terrain::None && is_grounded(attacker, field) =>
+        {
             modifiers.push(ModifierBreakdown::new(
                 "Terrain Pulse base power",
                 MOD_DOUBLE,

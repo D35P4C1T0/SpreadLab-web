@@ -97,6 +97,11 @@ function createContext() {
       filename: relative,
     });
   }
+  const uiSource = fs.readFileSync(path.join(REFERENCE, "script_res/ap_calc.js"), "utf8");
+  const hpStart = uiSource.indexOf("function calcUserHP(");
+  const hpEnd = uiSource.indexOf("function userHPResultText(", hpStart);
+  if (hpStart < 0 || hpEnd < 0) fail("missing pure attacker HP helper");
+  vm.runInContext(uiSource.slice(hpStart, hpEnd), context, { filename: "calcUserHP.js" });
   vm.runInContext(`
     gen = 10;
     typeChart = TYPE_CHART_SV;
@@ -262,7 +267,13 @@ function oracleSide(common, side = {}) {
     isSaltCure: side.saltCure ?? false,
     isAuroraVeil: side.auroraVeil ?? false,
     isSwamp: side.swamp ?? false,
-    isSeaFire: false,
+    isSeaFire: side.seaOfFire ?? false,
+    isLeechSeed: side.leechSeed ?? false,
+    isAquaRing: side.aquaRing ?? false,
+    isIngrain: side.ingrain ?? false,
+    isNightmare: side.nightmare ?? false,
+    isCurse: side.curse ?? false,
+    isBinding: side.binding ?? false,
     isRedItem: false,
     isBlueItem: false,
     isCharge: side.charge ?? false,
@@ -310,7 +321,7 @@ function oracleKoChances(damageIn, move, defender, field, attacker) {
     else if (field.spikes === 3) hazards += Math.floor(defender.maxHP / 4);
   }
   const eotDict = getAllEndOfTurnEffects(
-    defender, field, false, preventsHeal, preventsHealItem, preventsRestoreHP
+    defender, field, attacker.ability === "Bad Dreams", preventsHeal, preventsHealItem, preventsRestoreHP
   );
   let eot = 0;
   let toxicCounter = 0;
@@ -349,24 +360,34 @@ function oracleRun(input) {
     else if (abilities.includes("Sand Stream")) fieldInput.weather = "Sand";
     else if (abilities.includes("Snow Warning")) fieldInput.weather = "Snow";
   }
-  if (!fieldInput.terrain && [left.ability, right.ability].includes("Electric Surge")) {
-    fieldInput.terrain = "Electric";
+  if (!fieldInput.terrain) {
+    for (const [ability, terrain] of [["Electric Surge", "Electric"], ["Grassy Surge", "Grassy"], ["Psychic Surge", "Psychic"]]) {
+      if ([left.ability, right.ability].includes(ability)) { fieldInput.terrain = terrain; break; }
+    }
   }
   const field = oracleField(fieldInput);
   const results = CALCULATE_ALL_MOVES_SV(left, right, field);
+  const hpEffects = (user, target, side) => {
+    const noMove = { name: "(No Move)", category: "Status" };
+    return {
+      painSplitPercent: calcUserHP({ ...noMove, name: "Pain Split" }, user, target, 0, 0, false)[0],
+      leechSeedPercent: calcUserHP(noMove, user, target, 0, 0, side.isLeechSeed)[0],
+    };
+  };
   return {
     schemaVersion: 1,
+    attackerHpEffects: hpEffects(left, right, field._sides[1]),
     left: results[0].map((result, index) => ({
       damage: result.damage,
       description: result.description,
-      koText: getKOChanceText(result.damage, left.moves[index], right, field._sides[1], false, left.item === ""),
+      koText: getKOChanceText(result.damage, left.moves[index], right, field._sides[1], left.ability === "Bad Dreams", left.item === ""),
       koChances: oracleKoChances(result.damage, left.moves[index], right, field._sides[1], left),
       move: left.moves[index],
     })),
     right: results[1].map((result, index) => ({
       damage: result.damage,
       description: result.description,
-      koText: getKOChanceText(result.damage, right.moves[index], left, field._sides[0], false, right.item === ""),
+      koText: getKOChanceText(result.damage, right.moves[index], left, field._sides[0], right.ability === "Bad Dreams", right.item === ""),
       koChances: oracleKoChances(result.damage, right.moves[index], left, field._sides[0], right),
       move: right.moves[index],
     })),
@@ -395,7 +416,7 @@ function compact(result) {
       makesContact: move.makesContact, isPriority: move.isPriority,
     },
   }));
-  return { schemaVersion: result.schemaVersion, left: compactSide(result.left), right: compactSide(result.right), state: result.state };
+  return { schemaVersion: result.schemaVersion, left: compactSide(result.left), right: compactSide(result.right), state: result.state, attackerHpEffects: result.attackerHpEffects };
 }
 const serialized = process.env.NCP_ORACLE_COMPACT === "1"
   ? (Array.isArray(output) ? output.map(compact) : compact(output))

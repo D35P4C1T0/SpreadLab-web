@@ -61,7 +61,9 @@ pub(super) fn calc_attack_mods(
             && attacker.ability_on
             && move_.type_ == PokemonType::Fire)
         || (attacker.ability == Ability::Steelworker && move_.type_ == PokemonType::Steel)
-        || (matches!(attacker.ability, Ability::Plus | Ability::Minus) && attacker.ability_on)
+        || (matches!(attacker.ability, Ability::Plus | Ability::Minus)
+            && attacker.ability_on
+            && move_.category == Category::Special)
         || (attacker.ability == Ability::Sharpness && move_.is_slice)
         || (attacker.ability == Ability::RockyPayload && move_.type_ == PokemonType::Rock)
         || (attacker.ability == Ability::FireMane && move_.type_ == PokemonType::Fire)
