@@ -113,16 +113,21 @@ Cached remote sprites are written under `crates/spreadlab-web/assets/sprites-sta
 
 ## Regulation M-C data
 
-The web app pins the M-C [damage engine](https://github.com/D35P4C1T0/pkmn-dmg-lib-rs/commit/b8df8c49122f0f6016ecd049efca1824d59effe4)
-and [SpreadLab adapter](https://github.com/D35P4C1T0/SpreadLab/commit/134666268d180ccb032601d36a02d438b112d655).
-The adapter commit is on upstream's `agent/update-damage-library` branch.
+The web app pins the M-C [damage engine](https://github.com/D35P4C1T0/pkmn-dmg-lib-rs/commit/96f55ef04e66d882457af4f009f228de0e73afdc)
+and [SpreadLab adapter](https://github.com/D35P4C1T0/SpreadLab/commit/b5f018efc44922ba021cc06d0ef09f801f5753b3).
+Both dependencies were refreshed from upstream on 2026-09-14.
 Species, moves, abilities, and items come from these dependencies, including all
 23 newly usable species, their forms, six Megas, and the 12 new held items.
 The engine refreshed its source data from [Project Pokémon champout](https://github.com/projectpokemon/champout)
 and checked the [official M-C announcement](https://news.pokemon-home.com/en/page/816.html).
 
-NCP presets were checked against upstream commit
-`1c9bf83961dd954f5b3b64e0d101e4a8f12fcf1f` on 2026-09-11; the vendored file was unchanged.
+NCP presets were refreshed from [upstream commit
+`1369b359b85f0a6343df006acde92cc4a7d07805`](https://github.com/nerd-of-now/NCP-VGC-Damage-Calculator/commit/1369b359b85f0a6343df006acde92cc4a7d07805)
+on 2026-09-14, including the latest M-B and M-C updates (151 sets across 90 Pokémon entries).
+Only the preset data is vendored. The pinned Rust engine also syncs with this
+NCP revision, including damage, residual, and KO updates. The adapter's KO
+projection follows upstream berry behavior and does not apply Focus Sash
+survival; its separate sequence model retains its existing behavior.
 New Pokémon can be configured manually even when no preset exists.
 
 Direct damage effects use the engine's mechanics. Leek's critical-hit probability,
