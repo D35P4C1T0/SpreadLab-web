@@ -114,7 +114,7 @@ Cached remote sprites are written under `crates/spreadlab-web/assets/sprites-sta
 ## Regulation M-C data
 
 The web app pins the M-C [damage engine](https://github.com/D35P4C1T0/pkmn-dmg-lib-rs/commit/96f55ef04e66d882457af4f009f228de0e73afdc)
-and [SpreadLab adapter](https://github.com/D35P4C1T0/SpreadLab/commit/b5f018efc44922ba021cc06d0ef09f801f5753b3).
+and [SpreadLab adapter](https://github.com/D35P4C1T0/SpreadLab/commit/13582e8c87ebb15b95ce805413396395961c87df).
 Both dependencies were refreshed from upstream on 2026-09-14.
 Species, moves, abilities, and items come from these dependencies, including all
 23 newly usable species, their forms, six Megas, and the 12 new held items.

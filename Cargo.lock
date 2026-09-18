@@ -2119,7 +2119,7 @@ dependencies = [
 [[package]]
 name = "spreadlab-rs"
 version = "0.1.0"
-source = "git+https://github.com/D35P4C1T0/SpreadLab.git?rev=b5f018efc44922ba021cc06d0ef09f801f5753b3#b5f018efc44922ba021cc06d0ef09f801f5753b3"
+source = "git+https://github.com/D35P4C1T0/SpreadLab.git?rev=13582e8c87ebb15b95ce805413396395961c87df#13582e8c87ebb15b95ce805413396395961c87df"
 dependencies = [
  "anyhow",
  "clap",
