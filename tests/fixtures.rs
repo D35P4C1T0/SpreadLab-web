@@ -3254,3 +3254,41 @@ fn upstream_update_fields_default_when_reading_older_json() {
         result
     );
 }
+
+#[test]
+fn mega_sol_is_personal_sun_in_single_and_two_direction_calculations() {
+    let mut user = stat_100_mon("Mega Meganium", PokemonType::Grass);
+    user.ability = Ability::MegaSol;
+    let opponent = stat_100_mon("Opponent", PokemonType::Normal);
+    let weather_ball = Move::new("Weather Ball", 50, PokemonType::Normal, Category::Special);
+    let fire = Move::new("Flamethrower", 90, PokemonType::Fire, Category::Special);
+    let mut rain = Field::default();
+    rain.weather = Weather::Rain;
+    let mut sun = rain;
+    sun.weather = Weather::Sun;
+    let mut no_ability = user.clone();
+    no_ability.ability = Ability::None;
+    let expected_outgoing = calc(
+        no_ability.clone(),
+        opponent.clone(),
+        weather_ball.clone(),
+        sun,
+    );
+    let expected_incoming = calc(opponent.clone(), no_ability, fire.clone(), rain);
+    let outgoing = calc(user.clone(), opponent.clone(), weather_ball.clone(), rain);
+    let incoming = calc(opponent.clone(), user.clone(), fire.clone(), rain);
+    assert_eq!(outgoing.damage_rolls, expected_outgoing.damage_rolls);
+    assert_eq!(incoming.damage_rolls, expected_incoming.damage_rolls);
+    let batch = calculate_all_moves(BatchCalcInput {
+        left: user,
+        right: opponent,
+        left_moves: std::array::from_fn(|_| weather_ball.clone()),
+        right_moves: std::array::from_fn(|_| fire.clone()),
+        left_to_right_field: rain,
+        right_to_left_field: rain,
+        ruleset: Ruleset::Champions,
+    })
+    .unwrap();
+    assert_eq!(batch.left[0].damage_rolls, expected_outgoing.damage_rolls);
+    assert_eq!(batch.right[0].damage_rolls, expected_incoming.damage_rolls);
+}
