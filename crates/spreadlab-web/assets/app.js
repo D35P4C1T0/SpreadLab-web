@@ -180,9 +180,10 @@ function loadSetdexPresets() {
 function parseSet(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const [rawName = "Unknown", rawItem = "None"] = (lines[0] || "Unknown").split("@").map((part) => part.trim());
-  const data = { name: rawName, item: rawItem || "None", ability: "None", abilityOn: null, status: "Healthy", nature: "Hardy", moves: [], sps: {} };
+  const data = { name: rawName, item: rawItem || "None", ability: "None", abilityOn: null, abilityEnabled: null, status: "Healthy", nature: "Hardy", moves: [], sps: {} };
   for (const line of lines.slice(1)) {
     if (line.startsWith("Ability:")) data.ability = line.replace("Ability:", "").trim();
+    else if (/^Ability Enabled:/i.test(line)) data.abilityEnabled = parseBool(line.replace(/^Ability Enabled:/i, "").trim());
     else if (/^Ability On:/i.test(line)) data.abilityOn = parseBool(line.replace(/^Ability On:/i, "").trim());
     else if (/^Status:/i.test(line)) data.status = displayStatus(line.replace(/^Status:/i, "").trim());
     else if (line.endsWith("Nature")) data.nature = line.replace("Nature", "").trim();
@@ -209,8 +210,8 @@ function setWithAbilityState(text, cardKey) {
   if (!toggle) return normalized;
   return replaceOrInsertAfter(
     normalized,
-    /^Ability On:/i,
-    `Ability On: ${toggle.checked ? "true" : "false"}`,
+    /^Ability Enabled:/i,
+    `Ability Enabled: ${toggle.checked ? "true" : "false"}`,
     /^Ability:/i
   );
 }
@@ -281,7 +282,7 @@ function renderCard(card, parsed) {
   renderTypes(card, parsed.name);
   card.querySelector('[data-field="ability"]')?.replaceChildren(document.createTextNode(parsed.ability));
   const abilityToggle = card.querySelector("[data-ability-toggle]");
-  if (abilityToggle && parsed.abilityOn !== null) abilityToggle.checked = parsed.abilityOn;
+  if (abilityToggle) abilityToggle.checked = parsed.abilityEnabled ?? true;
   card.querySelector('[data-field="item"]')?.replaceChildren(document.createTextNode(parsed.item));
   const itemSprite = card.querySelector("[data-item-sprite]");
   if (itemSprite) {
@@ -335,7 +336,7 @@ function renderCard(card, parsed) {
     });
   }
   applyNatureClasses(card);
-  syncAbilityEffects();
+  syncToggleLabels();
   syncStatPresentation();
 }
 
@@ -617,16 +618,11 @@ function initAbilityToggles() {
       const card = toggle.closest("[data-set-card]");
       const editor = card?.querySelector(".raw-editor");
       if (!card || !editor) return;
-      editor.value = replaceOrInsertAfter(
-        editor.value,
-        /^Ability On:/i,
-        `Ability On: ${toggle.checked ? "true" : "false"}`,
-        /^Ability:/i
-      );
+      editor.value = setWithAbilityState(editor.value, card.dataset.setCard);
       delete card.dataset.activeSavedSet;
       syncRawEditor(editor);
       refreshSetLibrary(card);
-      syncAbilityEffects();
+      syncToggleLabels();
       saveState();
       autoRun();
     });
@@ -1287,14 +1283,14 @@ function megaStoneForPokemon(name) {
 
 function megaPokemonNameVariants(pokemon) {
   const variants = [pokemon];
-  const splitMega = pokemon.match(/^Mega (.+) ([XY])$/);
+  const splitMega = pokemon.match(/^Mega (.+) ([XYZ])$/);
   if (splitMega) variants.push(`${splitMega[1]}-Mega-${splitMega[2]}`);
   else if (pokemon.startsWith("Mega ")) variants.push(`${pokemon.slice(5)}-Mega`);
   return variants;
 }
 
 function normalizeMegaPokemonKey(name) {
-  return normalizeName(name).replace(/z$/, "");
+  return normalizeName(name);
 }
 
 function buildBlankPokemonSet(card, name) {
@@ -1345,7 +1341,7 @@ function initSwap() {
 }
 
 function fieldPayload() {
-  syncAbilityEffects();
+  syncToggleLabels();
   const value = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || "None";
   const checked = (name) => document.querySelector(`input[name="${name}"]`)?.checked || false;
   const boostValue = (name) => {
@@ -1505,6 +1501,12 @@ function restoreState() {
     setValue('[data-set-card="defender"] [data-card-nature]', state.defenderNature);
     setChecked('[data-set-card="attacker"] [data-ability-toggle]', state.attackerAbilityOn);
     setChecked('[data-set-card="defender"] [data-ability-toggle]', state.defenderAbilityOn);
+    for (const key of ["attacker", "defender"]) {
+      const editor = document.querySelector(`[data-set-card="${key}"] .raw-editor`);
+      if (editor && typeof state[`${key}AbilityOn`] === "boolean") {
+        editor.value = setWithAbilityState(editor.value, key);
+      }
+    }
     setValue('[data-set-card="attacker"] [data-status-select]', state.attackerStatus);
     setValue('[data-set-card="defender"] [data-status-select]', state.defenderStatus);
     for (const [name, value] of Object.entries(state.boosts || {})) setValue(`[name="${cssEscape(name)}"]`, value);
@@ -1850,116 +1852,6 @@ function initShare() {
 function selectedCrit() {
   const move = document.querySelector('[name="move_name"]')?.value || "";
   return document.querySelector(`[data-crit-move="${cssEscape(move)}"]`)?.checked || false;
-}
-
-function syncAbilityEffects() {
-  clearAutoField();
-  const attacker = activeCardAbility("attacker");
-  const defender = activeCardAbility("defender");
-  [attacker, defender].forEach(applyGlobalAbilityEffect);
-  applySideAbilityEffect("attacker", attacker, "defender");
-  applySideAbilityEffect("defender", defender, "attacker");
-  syncToggleLabels();
-}
-
-function activeCardAbility(cardKey) {
-  const card = document.querySelector(`[data-set-card="${cardKey}"]`);
-  const on = card?.querySelector("[data-ability-toggle]")?.checked;
-  if (!on) return "";
-  const editor = card.querySelector(".raw-editor");
-  if (editor) return parseSet(editor.value).ability;
-  return card.querySelector('[data-field="ability"]')?.textContent?.trim() || "";
-}
-
-function applyGlobalAbilityEffect(ability) {
-  const key = normalizeName(ability);
-  if (key === "fairyaura") autoCheck("fairy_aura", true);
-  if (["drought", "orichalcumpulse", "megasol"].includes(key)) autoRadio("weather", "Sun");
-  if (key === "drizzle") autoRadio("weather", "Rain");
-  if (["sandstream", "sandspit"].includes(key)) autoRadio("weather", "Sand");
-  if (key === "snowwarning") autoRadio("weather", "Snow");
-  if (["electricsurge", "hadronengine"].includes(key)) autoRadio("terrain", "Electric");
-  if (key === "grassysurge") autoRadio("terrain", "Grassy");
-  if (key === "psychicsurge") autoRadio("terrain", "Psychic");
-  if (key === "mistysurge") autoRadio("terrain", "Misty");
-}
-
-function applySideAbilityEffect(owner, ability, opponent) {
-  const key = normalizeName(ability);
-  if (key === "intimidate") applyIntimidate(owner, opponent);
-  if (key === "friendguard" && owner === "defender") autoCheck("defender_friend_guard", true);
-}
-
-function applyIntimidate(source, target) {
-  const targetAbility = normalizeName(activeCardAbility(target));
-  if (targetAbility === "mirrorarmor") {
-    applyStatDrop(target, source, "attack", -1);
-    return;
-  }
-  if (targetAbility === "guarddog") {
-    autoStageDelta(`${target}_attack`, 1);
-    return;
-  }
-  if (preventsIntimidate(targetAbility)) return;
-  applyStatDrop(source, target, "attack", -1);
-}
-
-function applyStatDrop(source, target, stat, stages) {
-  const ability = normalizeName(activeCardAbility(target));
-  if (ability === "contrary") {
-    autoStageDelta(`${target}_${stat}`, -stages);
-    return;
-  }
-  const multiplier = ability === "simple" ? 2 : 1;
-  autoStageDelta(`${target}_${stat}`, stages * multiplier);
-  if (stages < 0 && source !== target) {
-    if (ability === "defiant") autoStageDelta(`${target}_attack`, 2 * multiplier);
-    if (ability === "competitive") autoStageDelta(`${target}_special_attack`, 2 * multiplier);
-    if (ability === "rattled") autoStageDelta(`${target}_speed`, 1 * multiplier);
-  }
-}
-
-function preventsIntimidate(ability) {
-  return ["clearbody", "fullmetalbody", "whitesmoke", "hypercutter", "innerfocus", "oblivious", "owntempo", "scrappy"].includes(normalizeName(ability));
-}
-
-function autoStageDelta(name, delta) {
-  const input = document.querySelector(`[name="${name}"]`);
-  if (!input) return;
-  if (!input.dataset.auto) input.dataset.base = input.value || "0";
-  const current = Number(input.value || 0);
-  input.value = String(Math.max(-6, Math.min(6, current + delta)));
-  input.dataset.auto = "ability";
-}
-
-function clearAutoField() {
-  document.querySelectorAll("[data-auto]").forEach((input) => {
-    if (input.type === "checkbox") input.checked = false;
-    else if (input.type === "number") input.value = input.dataset.base || "0";
-    delete input.dataset.auto;
-    delete input.dataset.base;
-  });
-}
-
-function autoCheck(name, checked) {
-  const input = document.querySelector(`[name="${name}"]`);
-  if (!input) return;
-  input.checked = checked;
-  input.dataset.auto = "ability";
-}
-
-function autoRadio(name, value) {
-  const input = document.querySelector(`input[name="${name}"][value="${value}"]`);
-  if (!input) return;
-  input.checked = true;
-  input.dataset.auto = "ability";
-}
-
-function autoBoost(name, value) {
-  const input = document.querySelector(`[name="${name}"]`);
-  if (!input || Number(input.value || 0) !== 0) return;
-  input.value = String(value);
-  input.dataset.auto = "ability";
 }
 
 function syncToggleLabels() {

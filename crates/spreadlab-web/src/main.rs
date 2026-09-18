@@ -1112,22 +1112,16 @@ fn ko_rolls_to_chance(value: f32) -> f32 {
 fn normalize_showdown_set(text: &str) -> String {
     let mut training_parts = Vec::new();
     let mut insert_at = None;
-    let mut ability_insert_at = None;
-    let mut has_ability_on = false;
     let mut is_mega_floette = false;
     let mut out = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.to_ascii_lowercase().starts_with("ability:") {
-            ability_insert_at = Some(out.len() + 1);
             if let Some(ability) = ability_line_value(trimmed) {
                 if spreadlab_rs::data::parse_ability(ability).is_err() {
                     continue;
                 }
             }
-        }
-        if trimmed.to_ascii_lowercase().starts_with("ability on:") {
-            has_ability_on = true;
         }
         if let Some(payload) = trimmed
             .strip_prefix("EVs:")
@@ -1174,12 +1168,6 @@ fn normalize_showdown_set(text: &str) -> String {
         } else {
             out.push(line);
         }
-    }
-    if ability_insert_at.is_some() && !has_ability_on {
-        out.insert(
-            ability_insert_at.unwrap().min(out.len()),
-            "Ability On: true".to_owned(),
-        );
     }
     if !training_parts.is_empty() {
         let line = format!("SPs: {}", training_parts.join(" / "));
@@ -1518,6 +1506,48 @@ mod tests {
             "Kingambit @ Shed Shell\nAbility: Defiant\nAdamant Nature\n- Iron Head",
         );
         assert!(normalized.starts_with("Kingambit @ Shed Shell\n"));
+    }
+
+    #[tokio::test]
+    async fn aura_guard_reduces_contact_damage_through_web_endpoint() {
+        let state = AppState {
+            data: Arc::new(ChampionsData::load().unwrap()),
+        };
+        for (move_name, contact) in [
+            ("Close Combat", true),
+            ("Earthquake", false),
+            ("Aura Sphere", false),
+        ] {
+            let mut results = Vec::new();
+            for enabled in [false, true] {
+                let request = from_value(json!({
+                    "attacker_set": "Lucario\nAbility: Inner Focus",
+                    "defender_set": format!("Mega Lucario Z @ Lucarionite Z\nAbility: Aura Guard\nAbility Enabled: {enabled}"),
+                    "move_name": move_name,
+                    "move_times_affected": 0
+                })).unwrap();
+                results.push(
+                    api_damage(State(state.clone()), Json(request))
+                        .await
+                        .unwrap()
+                        .0,
+                );
+            }
+            let baseline = results[0]["rolls"].as_array().unwrap();
+            let guarded = results[1]["rolls"].as_array().unwrap();
+            for (normal, reduced) in baseline.iter().zip(guarded) {
+                let expected = normal.as_u64().unwrap() / if contact { 2 } else { 1 };
+                assert_eq!(reduced.as_u64().unwrap(), expected, "{move_name}");
+            }
+        }
+    }
+
+    #[test]
+    fn ability_state_is_passed_to_library_without_forcing_activation() {
+        let raw = "Arcanine\nAbility: Flash Fire\nAbility Enabled: false";
+        assert_eq!(normalize_showdown_set(raw), raw);
+        let explicit = format!("{raw}\nAbility On: true");
+        assert_eq!(normalize_showdown_set(&explicit), explicit);
     }
 
     #[test]

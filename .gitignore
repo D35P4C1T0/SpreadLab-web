@@ -5,3 +5,4 @@
 /crates/spreadlab-web/assets/item-sprites/
 
 /node_modules/
+/.cargo/config.toml

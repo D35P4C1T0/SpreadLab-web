@@ -135,6 +135,26 @@ Rocky Helmet retaliation, switching items, trapping duration, and terrain durati
 are not simulated by the single-attack calculator. Set critical hits and battle
 state explicitly where applicable.
 
+Ability behavior is owned by SpreadLab and the damage engine. The web app sends
+ability state and manual field/stage inputs without applying entry effects.
+`Ability Enabled:` controls the Active checkbox; `Ability On:` remains the
+library's conditional activation input. Mechanics regression tests live in the
+library repositories.
+
+For coordinated local library development, use `.cargo/config.toml` (ignored):
+
+```toml
+[patch."https://github.com/D35P4C1T0/SpreadLab.git"]
+spreadlab-rs = { path = "../SpreadLab" }
+
+[patch."https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git"]
+pkmn-dmg-lib = { path = "../pkmn-dmg-lib" }
+```
+
+This builds against sibling checkouts without changing production revision pins.
+After publishing library changes, update the pins and regenerate `Cargo.lock`
+without these local overrides before deployment.
+
 ## UI development and browser checks
 
 The responsive workspace uses the shared controls in `src/ui.rs`, the hand-written

@@ -114,6 +114,49 @@ test('spread, nature, boosts, status, crit, keyboard conditions, and all ranks r
   await page.close();
 });
 
+test('viewer delegates ability effects and serializes the Active toggle', async () => {
+  const page = await browser.newPage();
+  await ready(page, '/damage');
+  await page.evaluate(() => {
+    const attacker = document.querySelector('[data-set-card="attacker"] .raw-editor');
+    const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
+    attacker.value = 'Lucario\nAbility: Inner Focus\n- Close Combat';
+    defender.value = 'Mega Lucario Z @ Lucarionite Z\nAbility: Aura Guard';
+    syncRawEditor(attacker);
+    syncRawEditor(defender);
+    document.querySelector('[name="move_name"]').value = 'Close Combat';
+  });
+  // Compare fixed spreads, not the optimizer's different best spreads on/off.
+  const damageForInputs = async () => {
+    const body = await page.evaluate(() => currentPayload().body);
+    const response = await page.request.post(`${baseURL}/api/damage`, { data: body });
+    assert.equal(response.status(), 200);
+    return response.json();
+  };
+  const guarded = await damageForInputs();
+  await recalculate(page, () => page.locator('[data-set-card="defender"] [data-ability-toggle]').uncheck());
+  const unguarded = await damageForInputs();
+  assert.deepEqual(guarded.rolls, unguarded.rolls.map(value => Math.floor(value / 2)));
+  const payload = await page.evaluate(() => currentPayload().body);
+  assert.match(payload.defender_set, /Ability: Aura Guard/);
+  assert.match(payload.defender_set, /Ability Enabled: false/);
+  await page.evaluate(() => {
+    const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
+    defender.value = 'Mega Meganium\nAbility: Mega Sol';
+    syncRawEditor(defender);
+    document.querySelector('[name="weather"][value="Rain"]').checked = true;
+  });
+  assert.equal((await page.evaluate(() => currentPayload().body)).field.weather, 'Rain');
+  await page.evaluate(() => {
+    const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
+    defender.value = 'Salamence\nAbility: Intimidate';
+    syncRawEditor(defender);
+    document.querySelector('[name="attacker_attack"]').value = '2';
+  });
+  assert.equal((await page.evaluate(() => currentPayload().body)).field.attacker_boosts.attack, 2);
+  await page.close();
+});
+
 test('set editing, saving, loading, forms, items, swapping, and offensive mode stay reachable', async () => {
   let page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.setDefaultTimeout(10000);
@@ -124,7 +167,8 @@ test('set editing, saving, loading, forms, items, swapping, and offensive mode s
   await attacker.locator('.raw-editor').fill('Rillaboom @ Grassy Seed\nAbility: Grassy Surge\nAdamant Nature\nSPs: 32 Atk\n- Drum Beating\n- Knock Off');
   await attacker.locator('.raw-editor').blur();
   await attacker.locator('.raw-toggle').click();
-  assert.equal(await page.locator('[name="terrain"][value="Grassy"]').isChecked(), true);
+  // The viewer submits manual conditions; library preprocessing applies Grassy Surge.
+  assert.equal(await page.locator('[name="terrain"][value="None"]').isChecked(), true);
   await attacker.locator('[data-save-set]').click();
   await attacker.locator('[data-save-set-name]').fill('Browser test set');
   await attacker.locator('[data-confirm-save]').click();

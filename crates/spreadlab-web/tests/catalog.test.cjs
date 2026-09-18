@@ -6,7 +6,7 @@ const { test } = require('node:test');
 
 // Exercise the browser's pure catalog functions without a DOM dependency.
 const source = fs.readFileSync(path.join(__dirname, '../assets/app.js'), 'utf8');
-const names = ['setPokemonList', 'baseSpeciesName', 'defaultSpeciesForBase', 'canonicalSpeciesName', 'sortedUniqueNames', 'normalizeName'];
+const names = ['setPokemonList', 'baseSpeciesName', 'defaultSpeciesForBase', 'canonicalSpeciesName', 'sortedUniqueNames', 'normalizeName', 'megaStoneForPokemon', 'megaPokemonNameVariants', 'normalizeMegaPokemonKey', 'setWithAbilityState', 'normalizedSetText', 'replaceOrInsertAfter'];
 const functions = names.map(name => {
   const start = source.indexOf(`function ${name}(`);
   assert.ok(start >= 0, name);
@@ -20,6 +20,29 @@ function rebuildPokemonOptionSearchList() {}
 ${functions}
 ${stones}`, context);
 const evaluate = code => vm.runInContext(code, context);
+
+test('ability checkbox serializes enabled state without rewriting ability or activation', () => {
+  context.document = { querySelector: () => ({ checked: false }) };
+  const set = 'Mega Lucario Z\nAbility: Aura Guard\nAbility On: true';
+  const disabled = evaluate(`setWithAbilityState(${JSON.stringify(set)}, 'defender')`);
+  assert.match(disabled, /Ability: Aura Guard/);
+  assert.match(disabled, /Ability Enabled: false/);
+  assert.match(disabled, /Ability On: true/);
+  context.document = { querySelector: () => ({ checked: true }) };
+  const enabled = evaluate(`setWithAbilityState(${JSON.stringify(disabled)}, 'defender')`);
+  assert.match(enabled, /Ability Enabled: true/);
+  assert.equal(enabled.match(/Ability Enabled:/g).length, 1);
+});
+
+test('ordinary and Z Mega forms keep distinct stones and Showdown aliases', () => {
+  for (const species of ['Lucario', 'Absol', 'Garchomp']) {
+    const stone = { Lucario: 'Lucarionite', Absol: 'Absolite', Garchomp: 'Garchompite' }[species];
+    for (const suffix of ['', ' Z']) {
+      assert.equal(evaluate(`megaStoneForPokemon('Mega ${species}${suffix}')`), stone + suffix);
+      assert.equal(evaluate(`megaStoneForPokemon('${species}-Mega${suffix.replace(' ', '-')}')`), stone + suffix);
+    }
+  }
+});
 
 test('M-C form imports select canonical forms and stable defaults', () => {
   const aliases = {
