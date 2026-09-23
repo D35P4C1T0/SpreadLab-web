@@ -1623,6 +1623,7 @@ mod tests {
         let response = api::find_min_hp_def_survival_with_data(
             &data,
             api::HpDefSurvivalRequest {
+                search: None,
                 attacker_set: normalize_showdown_set(
                     "Kingambit @ Black Glasses\n\
                      Ability: Defiant\n\
@@ -1650,6 +1651,98 @@ mod tests {
         .expect("defensive optimization accepts over-cap attacker SP total");
 
         assert!(response.best.is_some());
+    }
+
+    #[tokio::test]
+    async fn survive_endpoint_searches_hp_defense_and_special_defense() {
+        let state = AppState {
+            data: Arc::new(ChampionsData::load().unwrap()),
+        };
+        // spreadlab-rs f400166 replaced the HP/Defense plane search with an exact
+        // HP/Defense/SpD enumeration, so special damage can now buy SpD instead
+        // of only HP. Upstream's audit fixture has a unique fixed-nature minimum
+        // of 5 HP / 14 SpD (19 points) at a 0.25 KO ceiling; the retired search
+        // returned 26 HP / 0 SpD (26 points).
+        let request: api::HpDefSurvivalRequest = from_value(json!({
+            "attacker_set": "Dragapult @ Life Orb\nSPs: 32 SpA\nHardy Nature",
+            "defender_set": "Mega Salamence\nHardy Nature",
+            "move_name": "Dragon Pulse",
+            "move_times_affected": 0,
+            "max_ko_chance": 0.25,
+            "hp_percent": 100.0,
+            "optimize_nature": false,
+            "limit": 1
+        }))
+        .unwrap();
+
+        let response = api_survive(State(state), Json(request)).await.unwrap().0;
+        let best = &response["best"];
+        assert_eq!(best["total_points"], 19);
+        assert_eq!(best["sps"]["hp"], 5);
+        assert_eq!(best["sps"]["defense"], 0);
+        assert_eq!(best["sps"]["special_defense"], 14);
+        assert!(best["result"]["ko_chance"].as_f64().unwrap() <= 0.25);
+    }
+
+    #[tokio::test]
+    async fn survive_endpoint_forwards_library_search_options() {
+        let state = AppState {
+            data: Arc::new(ChampionsData::load().unwrap()),
+        };
+        // The web layer only forwards `search`, so f400166's contract stays
+        // authoritative: the parsed Attack/SpA/Speed investment is preserved
+        // unless the caller locks it, and an explicit lock reproduces the
+        // retired HP/Defense-only minimum. The Floette-Mega default set spends
+        // 5 SpA / 22 Spe, which is why the unlocked answer costs 63 SP.
+        let request = |search: Value| -> api::HpDefSurvivalRequest {
+            let mut body = json!({
+                "attacker_set": "Kingambit @ Black Glasses\n\
+                                 Ability: Defiant\n\
+                                 Adamant Nature\n\
+                                 SPs: 32 Atk\n\
+                                 - Iron Head",
+                "defender_set": "Floette-Mega @ Floettite\n\
+                                 Ability: Fairy Aura\n\
+                                 Level: 50\n\
+                                 EVs: 26 HP / 13 Def / 5 SpA / 22 Spe\n\
+                                 Timid Nature\n\
+                                 - Dazzling Gleam",
+                "move_name": "Iron Head",
+                "move_times_affected": 0,
+                "max_ko_chance": 0.125,
+                "hp_percent": 100.0,
+                "nature": "Timid",
+                "optimize_nature": false,
+                "limit": 1
+            });
+            body["search"] = search;
+            from_value(body).unwrap()
+        };
+
+        let preserved = api_survive(State(state.clone()), Json(request(Value::Null)))
+            .await
+            .unwrap()
+            .0;
+        let best = &preserved["best"];
+        assert_eq!(best["sps"]["hp"], 4);
+        assert_eq!(best["sps"]["defense"], 32);
+        assert_eq!(best["sps"]["special_attack"], 5);
+        assert_eq!(best["sps"]["speed"], 22);
+        assert_eq!(best["total_points"], 63);
+
+        let locked = api_survive(
+            State(state),
+            Json(request(json!({ "locked": { "special_attack": 0, "speed": 0 } }))),
+        )
+        .await
+        .unwrap()
+        .0;
+        let best = &locked["best"];
+        assert_eq!(best["sps"]["hp"], 4);
+        assert_eq!(best["sps"]["defense"], 32);
+        assert_eq!(best["sps"]["special_attack"], 0);
+        assert_eq!(best["sps"]["speed"], 0);
+        assert_eq!(best["total_points"], 36);
     }
 
     #[test]

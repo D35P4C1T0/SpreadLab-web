@@ -19,7 +19,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 damage_calc = { package = "pkmn-dmg-lib", git = "https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git", rev = "96f55ef04e66d882457af4f009f228de0e73afdc", features = ["serde"] }
-spreadlab-rs = { git = "https://github.com/D35P4C1T0/SpreadLab.git", rev = "13582e8c87ebb15b95ce805413396395961c87df" }
+spreadlab-rs = { git = "https://github.com/D35P4C1T0/SpreadLab.git", rev = "f400166eb5468a58fd3c8c65f67c9f3533ab087d" }
 thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
 tower-http = { version = "0.5", features = ["fs", "trace"] }
