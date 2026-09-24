@@ -6,7 +6,7 @@
     "test:apply": "node --test crates/spreadlab-web/tests/apply.test.cjs",
     "test:scheduling": "node --test crates/spreadlab-web/tests/scheduling.test.cjs",
     "test:skeleton": "node --test crates/spreadlab-web/tests/skeleton.test.cjs",
-    "test:ui": "node --test crates/spreadlab-web/tests/workspace.test.cjs crates/spreadlab-web/tests/scheduling.test.cjs crates/spreadlab-web/tests/apply.test.cjs crates/spreadlab-web/tests/skeleton.test.cjs"
+    "test:ui": "node --test --test-concurrency=1 crates/spreadlab-web/tests/workspace.test.cjs crates/spreadlab-web/tests/scheduling.test.cjs crates/spreadlab-web/tests/apply.test.cjs crates/spreadlab-web/tests/skeleton.test.cjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

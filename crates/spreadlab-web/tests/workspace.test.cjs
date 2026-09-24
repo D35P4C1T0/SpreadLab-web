@@ -109,8 +109,12 @@ test('spread, nature, boosts, status, crit, keyboard conditions, and all ranks r
   const data = await recalculate(page, () => page.locator('[name="limit"]').fill('20'));
   assert.equal(await page.locator('.damage-rolls').evaluate(node => node.open), true);
   const matches = Array.isArray(data) ? data : data.matches;
-  assert.equal(matches.length, 20);
-  assert.equal(await page.locator('.table-scroll tbody tr').count(), 20);
+  // spreadlab-rs db5d932 pins the defensive stat its engine cannot read for the
+  // request, so the default physical benchmark no longer returns SpD-only variants
+  // of the same objective. The reachable domain for this request is 17 rows
+  // (1 + 2 + 5 + 9 over the 63..66 SP layers), and every one of them is rendered.
+  assert.equal(matches.length, 17);
+  assert.equal(await page.locator('.table-scroll tbody tr').count(), 17);
   await page.locator('[name="limit"]').fill('0');
   assert.equal(await page.locator('[name="limit"]').evaluate(node => node.validity.valid), false);
   await page.close();
