@@ -51,6 +51,15 @@ rebuilt; the browser reconnects and reloads after restart:
 cargo watch -x 'run -p spreadlab-web -- serve --host 127.0.0.1 --port 3000'
 ```
 
+Heavy survival searches run roughly an order of magnitude faster under the
+release profile than under the debug profile. A release build is an optional
+performance mitigation for a responsive local workflow, not a substitute for the
+request coalescing and admission limits that keep calculations from piling up:
+
+```sh
+cargo run --release -p spreadlab-web -- serve --host 127.0.0.1 --port 3000
+```
+
 Release builds do not include or run live-reload middleware.
 
 ## Docker
@@ -160,8 +169,10 @@ without these local overrides before deployment.
 The responsive workspace uses the shared controls in `src/ui.rs`, the hand-written
 `assets/app.css` stylesheet, and presentation helpers in `assets/app.js` (paths
 relative to `crates/spreadlab-web`). Calculator requests and domain logic stay in
-the existing adapter. The optimized side's six SP values are a read-only result
-preview; they do not add constraints to optimization.
+the existing adapter. The six SP values shown under a set are its current
+investment, not the optimizer's answer; ranked rows stay advisory until you
+choose Apply spread, which copies that row's SPs and nature onto the matching
+side.
 
 With the server running, install and run the browser checks using pnpm:
 

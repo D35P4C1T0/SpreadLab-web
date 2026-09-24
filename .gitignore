@@ -6,3 +6,6 @@
 
 /node_modules/
 /.cargo/config.toml
+
+# Local agent plans, reports, and diagnostic artifacts
+/docs/agent-work/

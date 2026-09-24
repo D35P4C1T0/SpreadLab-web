@@ -57,10 +57,9 @@ for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768
     }
     assert.match(await page.locator('.damage-grid').innerText(), /134–158/);
     assert.match(await page.locator('.damage-title').innerText(), /Iron Head[\s\S]*Floette-Mega/);
-    // spreadlab-rs f400166 preserves the parsed Attack/SpA/Speed investment and
-    // minimizes HP/Def/SpD, so the default Floette-Mega set keeps its 5 SpA and
-    // 22 Spe while HP/Def drop from 26/13 to 4/32 (63 SP total).
-    assert.deepEqual(await page.locator('[data-optimized-sp]').allTextContents(), ['4', '0', '32', '5', '0', '22']);
+    // The card display now shows the set's actual investment instead of the
+    // optimizer's best spread, so the default Floette-Mega EVs survive untouched.
+    assert.deepEqual(await page.locator('[data-preview-sp]').allTextContents(), ['26', '0', '13', '5', '0', '22']);
     await page.locator('.damage-rolls summary').click();
     assert.equal((await page.locator('.damage-rolls code').innerText()).split(',').length, 16);
     if (screenshots) {
@@ -193,7 +192,7 @@ test('set editing, saving, loading, forms, items, swapping, and offensive mode s
   await page.waitForFunction(() => document.querySelector('.results-panel').textContent.includes('No matching spread'));
   await recalculate(page, () => page.locator('[name="min_ko_chance"]').selectOption('0'), '/api/ko');
   await page.waitForSelector('.damage-card');
-  assert.equal(await page.locator('[data-set-card="attacker"] [data-optimized-sp]').count(), 6);
+  assert.equal(await page.locator('[data-set-card="attacker"] [data-preview-sp]').count(), 6);
   assert.equal(await page.locator('[data-set-card="defender"] [data-sp-key]').count(), 6);
   assert.equal(await page.locator('[name="min_ko_chance"]').isVisible(), true);
   const payload = await page.evaluate(() => currentPayload());
@@ -260,7 +259,7 @@ test('stat modifier clicks update nature on editable and optimized sides', async
   for (const side of ['attacker', 'defender']) {
     const card = page.locator(`[data-set-card="${side}"]`);
     const nature = card.locator('[data-card-nature]');
-    const stat = key => card.locator(`[data-sp-row] [data-sp-key="${key}"], [data-optimized-sp="${key}"]`);
+    const stat = key => card.locator(`[data-sp-row] [data-sp-key="${key}"], [data-preview-sp="${key}"]`);
     await nature.selectOption('Adamant');
     await stat('spe').click({ modifiers: ['Control'] });
     assert.equal(await nature.inputValue(), 'Jolly');

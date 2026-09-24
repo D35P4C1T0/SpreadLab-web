@@ -19,6 +19,7 @@ use std::{
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 #[cfg(debug_assertions)]
 use tower_livereload::{LiveReloadLayer, Reloader};
@@ -45,6 +46,71 @@ enum Command {
 #[derive(Clone)]
 struct AppState {
     data: Arc<ChampionsData>,
+    admission: Arc<Admission>,
+}
+
+impl AppState {
+    fn new(data: Arc<ChampionsData>) -> Self {
+        Self {
+            data,
+            admission: Arc::new(Admission::new()),
+        }
+    }
+}
+
+/// Which blocking compute lane a request belongs to.
+///
+/// The optimizer lane covers the survival, sequence, KO and optimization
+/// searches. Plain damage keeps its own lane so a cheap damage preview stays
+/// available while a long optimizer job occupies the other lane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ComputeLane {
+    Damage,
+    Optimizer,
+}
+
+impl ComputeLane {
+    fn label(self) -> &'static str {
+        match self {
+            ComputeLane::Damage => "damage",
+            ComputeLane::Optimizer => "optimizer",
+        }
+    }
+}
+
+/// Process-wide, fail-fast admission slots for blocking CPU work.
+///
+/// Each lane is bounded to a single concurrent job. A request that finds its
+/// lane occupied is rejected immediately instead of queuing behind the running
+/// job, which keeps abandoned or superseded work from piling up.
+struct Admission {
+    damage: Arc<Semaphore>,
+    optimizer: Arc<Semaphore>,
+}
+
+impl Admission {
+    const SLOTS_PER_LANE: usize = 1;
+
+    fn new() -> Self {
+        Self {
+            damage: Arc::new(Semaphore::new(Self::SLOTS_PER_LANE)),
+            optimizer: Arc::new(Semaphore::new(Self::SLOTS_PER_LANE)),
+        }
+    }
+
+    fn lane(&self, lane: ComputeLane) -> &Arc<Semaphore> {
+        match lane {
+            ComputeLane::Damage => &self.damage,
+            ComputeLane::Optimizer => &self.optimizer,
+        }
+    }
+
+    fn try_acquire(&self, lane: ComputeLane) -> Result<OwnedSemaphorePermit, WebError> {
+        self.lane(lane)
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| WebError::Busy(lane.label()))
+    }
 }
 
 const TRANSPARENT_PNG: &[u8] = &[
@@ -63,6 +129,8 @@ enum WebError {
     Join(#[from] tokio::task::JoinError),
     #[error("asset error: {0}")]
     Asset(String),
+    #[error("Server is busy; another {0} calculation is already running. Retry in a moment.")]
+    Busy(&'static str),
 }
 
 impl IntoResponse for WebError {
@@ -71,6 +139,7 @@ impl IntoResponse for WebError {
             WebError::Api(api::ApiError::Showdown(_)) => StatusCode::BAD_REQUEST,
             WebError::Api(api::ApiError::Optimize(_)) => StatusCode::BAD_REQUEST,
             WebError::Json(_) => StatusCode::BAD_REQUEST,
+            WebError::Busy(_) => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, Json(json!({ "error": self.to_string() }))).into_response()
@@ -94,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn serve(host: String, port: u16) -> anyhow::Result<()> {
     let data = Arc::new(ChampionsData::load()?);
-    let state = AppState { data };
+    let state = AppState::new(data);
     let assets = ServeDir::new("crates/spreadlab-web/assets");
     let app = Router::new()
         .route("/", get(page_damage))
@@ -467,7 +536,7 @@ async fn api_damage(
 ) -> Result<Json<Value>, WebError> {
     let warnings = warning_messages_from_sets([&request.attacker_set, &request.defender_set]);
     normalize_damage_request(&mut request);
-    call_with_data_value(state, warnings, move |data| {
+    call_with_data_value(state, ComputeLane::Damage, warnings, move |data| {
         api::calculate_damage_request_with_data(&data, request)
     })
     .await
@@ -481,7 +550,7 @@ async fn api_survive(
     let optimize_nature = request.optimize_nature;
     let limit = request.limit;
     normalize_survive_request(&mut request);
-    let mut response = call_with_data_value(state, warnings, move |data| {
+    let mut response = call_with_data_value(state, ComputeLane::Optimizer, warnings, move |data| {
         api::find_min_hp_def_survival_with_data(&data, request)
     })
     .await?;
@@ -502,7 +571,7 @@ async fn api_sequence(
     let optimize_nature = request.optimize_nature;
     let limit = request.limit;
     normalize_sequence_request(&mut request);
-    let mut response = call_with_data_value(state, warnings, move |data| {
+    let mut response = call_with_data_value(state, ComputeLane::Optimizer, warnings, move |data| {
         api::find_min_combined_hp_def_survival_with_data(&data, request)
     })
     .await?;
@@ -520,7 +589,7 @@ async fn api_ko(
     let optimize_nature = request.optimize_nature;
     let limit = request.limit;
     normalize_ko_request(&mut request);
-    let mut response = call_with_data_value(state, warnings, move |data| {
+    let mut response = call_with_data_value(state, ComputeLane::Optimizer, warnings, move |data| {
         api::find_min_offensive_ko_with_data(&data, request)
     })
     .await?;
@@ -541,7 +610,7 @@ async fn api_optimize_defensive(
             .flat_map(|benchmark| [&benchmark.attacker_set, &benchmark.defender_set]),
     );
     normalize_optimize_request(&mut request);
-    call_with_data_value(state, warnings, move |data| {
+    call_with_data_value(state, ComputeLane::Optimizer, warnings, move |data| {
         api::run_defensive_optimization_with_data(&data, request)
     })
     .await
@@ -558,7 +627,7 @@ async fn api_optimize_offensive(
             .flat_map(|benchmark| [&benchmark.attacker_set, &benchmark.defender_set]),
     );
     normalize_optimize_request(&mut request);
-    call_with_data_value(state, warnings, move |data| {
+    call_with_data_value(state, ComputeLane::Optimizer, warnings, move |data| {
         api::run_offensive_optimization_with_data(&data, request)
     })
     .await
@@ -566,6 +635,7 @@ async fn api_optimize_offensive(
 
 async fn call_with_data_value<T, F>(
     state: AppState,
+    lane: ComputeLane,
     warnings: Vec<String>,
     f: F,
 ) -> Result<Json<Value>, WebError>
@@ -574,10 +644,30 @@ where
     F: FnOnce(Arc<ChampionsData>) -> Result<T, api::ApiError> + Send + 'static,
 {
     let data = state.data.clone();
-    let response = tokio::task::spawn_blocking(move || f(data)).await??;
+    let response = run_in_lane(&state.admission, lane, move || f(data)).await??;
     let mut value = serde_json::to_value(response)?;
     attach_warnings(&mut value, warnings);
     Ok(Json(value))
+}
+
+/// Reserve a lane slot, then run `f` on the blocking pool.
+///
+/// Admission happens before the blocking task is spawned so an occupied lane
+/// fails fast instead of queuing. The owned permit is moved into the blocking
+/// closure, so it is released only when the CPU work actually finishes - including
+/// when the HTTP handler has already been dropped by the client.
+async fn run_in_lane<T, F>(admission: &Admission, lane: ComputeLane, f: F) -> Result<T, WebError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let permit = admission.try_acquire(lane)?;
+    let result = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        f()
+    })
+    .await?;
+    Ok(result)
 }
 
 fn normalize_damage_request(request: &mut api::DamageRequest) {
@@ -1354,6 +1444,8 @@ fn item_slug(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn showdown_sprite_slugs_cover_new_and_formed_megas() {
@@ -1398,7 +1490,7 @@ mod tests {
     #[tokio::test]
     async fn regulation_m_c_catalog_reaches_web_endpoints() {
         let data = Arc::new(ChampionsData::load().unwrap());
-        let state = AppState { data: data.clone() };
+        let state = AppState::new(data.clone());
         let meta = api_meta(State(state.clone())).await.unwrap().0;
         let types = api_species_types(State(state)).await.0;
         let abilities = api_species_abilities().await.0;
@@ -1510,9 +1602,7 @@ mod tests {
 
     #[tokio::test]
     async fn aura_guard_reduces_contact_damage_through_web_endpoint() {
-        let state = AppState {
-            data: Arc::new(ChampionsData::load().unwrap()),
-        };
+        let state = AppState::new(Arc::new(ChampionsData::load().unwrap()));
         for (move_name, contact) in [
             ("Close Combat", true),
             ("Earthquake", false),
@@ -1655,9 +1745,7 @@ mod tests {
 
     #[tokio::test]
     async fn survive_endpoint_searches_hp_defense_and_special_defense() {
-        let state = AppState {
-            data: Arc::new(ChampionsData::load().unwrap()),
-        };
+        let state = AppState::new(Arc::new(ChampionsData::load().unwrap()));
         // spreadlab-rs f400166 replaced the HP/Defense plane search with an exact
         // HP/Defense/SpD enumeration, so special damage can now buy SpD instead
         // of only HP. Upstream's audit fixture has a unique fixed-nature minimum
@@ -1686,9 +1774,7 @@ mod tests {
 
     #[tokio::test]
     async fn survive_endpoint_forwards_library_search_options() {
-        let state = AppState {
-            data: Arc::new(ChampionsData::load().unwrap()),
-        };
+        let state = AppState::new(Arc::new(ChampionsData::load().unwrap()));
         // The web layer only forwards `search`, so f400166's contract stays
         // authoritative: the parsed Attack/SpA/Speed investment is preserved
         // unless the caller locks it, and an explicit lock reproduces the
@@ -1777,5 +1863,190 @@ mod tests {
         .expect("offensive optimization accepts over-cap defender SP total");
 
         assert!(response.best.is_some());
+    }
+
+    #[test]
+    fn busy_web_error_reports_service_unavailable() {
+        let response = WebError::Busy("optimizer").into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn admission_rejects_without_running_closure() {
+        let admission = Admission::new();
+        let held = admission
+            .try_acquire(ComputeLane::Damage)
+            .expect("first damage slot");
+        let ran = Arc::new(AtomicBool::new(false));
+        let ran_in_closure = ran.clone();
+
+        let error = run_in_lane(&admission, ComputeLane::Damage, move || {
+            ran_in_closure.store(true, Ordering::SeqCst);
+        })
+        .await
+        .expect_err("second damage request must be rejected");
+
+        assert!(matches!(error, WebError::Busy("damage")));
+        assert!(
+            !ran.load(Ordering::SeqCst),
+            "rejected request must not run its blocking closure"
+        );
+        drop(held);
+    }
+
+    #[tokio::test]
+    async fn permit_releases_after_success_handler_error_and_panic() {
+        let admission = Admission::new();
+
+        assert_eq!(
+            run_in_lane(&admission, ComputeLane::Optimizer, || 7)
+                .await
+                .unwrap(),
+            7
+        );
+        let permit = admission
+            .try_acquire(ComputeLane::Optimizer)
+            .expect("lane free after success");
+        drop(permit);
+
+        let handled: Result<Result<(), &str>, WebError> =
+            run_in_lane(&admission, ComputeLane::Damage, || Err("nope")).await;
+        assert!(matches!(handled, Ok(Err("nope"))));
+        let permit = admission
+            .try_acquire(ComputeLane::Damage)
+            .expect("lane free after handler error");
+        drop(permit);
+
+        let panicked = run_in_lane(&admission, ComputeLane::Optimizer, || -> () {
+            panic!("blocking work failed");
+        })
+        .await;
+        assert!(matches!(panicked, Err(WebError::Join(_))));
+        let permit = admission
+            .try_acquire(ComputeLane::Optimizer)
+            .expect("lane free after panic");
+        drop(permit);
+    }
+
+    #[tokio::test]
+    async fn permit_survives_caller_drop_until_work_finishes() {
+        let admission = Arc::new(Admission::new());
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+
+        let admission_for_task = admission.clone();
+        let handle = tokio::spawn(async move {
+            run_in_lane(&admission_for_task, ComputeLane::Optimizer, move || {
+                started_tx.send(()).expect("signal start");
+                release_rx.recv().expect("wait for release");
+            })
+            .await
+        });
+
+        // Poll instead of blocking: the test runtime is single-threaded, so a
+        // blocking recv would starve the spawned task that signals us.
+        let started_deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            match started_rx.try_recv() {
+                Ok(()) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    panic!("blocking job failed to start")
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    assert!(Instant::now() < started_deadline, "blocking job started");
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        }
+        // Drop the caller while the blocking CPU work is still running.
+        handle.abort();
+        let cancelled = handle.await;
+        assert!(
+            cancelled
+                .expect_err("aborted caller future must not resolve")
+                .is_cancelled(),
+            "caller future must report cancellation"
+        );
+
+        assert!(
+            admission.try_acquire(ComputeLane::Optimizer).is_err(),
+            "permit must stay held inside the detached blocking closure"
+        );
+
+        release_tx.send(()).expect("release blocking job");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Ok(permit) = admission.try_acquire(ComputeLane::Optimizer) {
+                drop(permit);
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "permit must be released once blocking work finishes"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn damage_and_optimizer_lanes_are_independent() {
+        let admission = Admission::new();
+        let optimizer = admission
+            .try_acquire(ComputeLane::Optimizer)
+            .expect("optimizer slot");
+
+        assert_eq!(
+            run_in_lane(&admission, ComputeLane::Damage, || 41)
+                .await
+                .unwrap(),
+            41
+        );
+        assert!(admission.try_acquire(ComputeLane::Damage).is_ok());
+        assert!(admission.try_acquire(ComputeLane::Optimizer).is_err());
+        drop(optimizer);
+    }
+
+    #[tokio::test]
+    async fn compute_endpoints_reject_when_their_lane_is_busy() {
+        let state = AppState::new(Arc::new(ChampionsData::load().unwrap()));
+        let optimizer = state
+            .admission
+            .try_acquire(ComputeLane::Optimizer)
+            .expect("optimizer slot");
+        let damage = state
+            .admission
+            .try_acquire(ComputeLane::Damage)
+            .expect("damage slot");
+
+        let damage_request: api::DamageRequest = from_value(json!({
+            "attacker_set": "Lucario\nAbility: Inner Focus",
+            "defender_set": "Mega Lucario Z\nAbility: Aura Guard",
+            "move_name": "Close Combat",
+            "move_times_affected": 0
+        }))
+        .unwrap();
+        let error = api_damage(State(state.clone()), Json(damage_request))
+            .await
+            .expect_err("damage lane busy");
+        assert!(matches!(error, WebError::Busy("damage")));
+
+        let survive_request: api::HpDefSurvivalRequest = from_value(json!({
+            "attacker_set": "Kingambit @ Black Glasses\nAbility: Defiant\nAdamant Nature\n- Iron Head",
+            "defender_set": "Mega Floette @ Floettite\nAbility: Fairy Aura\nTimid Nature",
+            "move_name": "Iron Head",
+            "move_times_affected": 0,
+            "max_ko_chance": 0.125,
+            "hp_percent": 100.0,
+            "optimize_nature": false,
+            "limit": 1
+        }))
+        .unwrap();
+        let error = api_survive(State(state.clone()), Json(survive_request))
+            .await
+            .expect_err("optimizer lane busy");
+        assert!(matches!(error, WebError::Busy("optimizer")));
+
+        drop(damage);
+        drop(optimizer);
     }
 }

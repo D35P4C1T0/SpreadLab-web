@@ -224,9 +224,15 @@ th, td { padding: 8px 5px; border-bottom: 1px solid #263545; text-align: left; }
 th { position: sticky; top: 0; z-index: 1; background: #142130; color: var(--muted); font-weight: 400; font-size: 10px; white-space: nowrap; }
 td { vertical-align: top; }
 td:nth-child(3) { min-width: 100px; }
-td:last-child { white-space: nowrap; }
+td:nth-child(5) { white-space: nowrap; }
 tr.best-row { background: #1b313b; }
 tr.best-row td:first-child { color: var(--cyan); }
+.apply-cell { position: sticky; right: 0; z-index: 1; text-align: right; background: var(--panel); }
+tr.best-row .apply-cell { background: #1b313b; }
+.table-card th:last-child { position: sticky; right: 0; background: var(--panel); }
+.apply-spread { padding: 3px 8px; border: 0; border-radius: 6px; background: var(--panel-2); color: var(--cyan); font-size: 10px; font-weight: 600; white-space: nowrap; opacity: 0; transition: background-color 120ms; }
+tr:hover .apply-spread, tr:focus-within .apply-spread { opacity: 1; }
+.apply-spread:hover { background: #24424b; color: var(--text); }
 .warning-card { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #3b3325; color: var(--gold); font-size: 12px; }
 .warning-card p { margin: 0; }
 .empty-state { display: grid; align-content: center; min-height: 240px; text-align: center; }
@@ -236,7 +242,31 @@ tr.best-row td:first-child { color: var(--cyan); }
 .result-actions { display: flex; gap: 8px; margin-top: 12px; }
 .result-actions button { padding: 6px; border: 0; border-radius: 8px; background: var(--panel-2); font-size: 11px; }
 .result-actions:not(:has(button:not(:disabled))) { display: none; }
-.results-panel.loading::after { content: "Recalculating…"; position: sticky; z-index: 5; bottom: 0; display: block; width: fit-content; margin: 12px 0 0 auto; padding: 6px 10px; border-radius: 8px; background: #28424b; color: var(--cyan); font-size: 12px; }
+/* Loading skeleton: an opaque, theme-matched placeholder surface that covers the
+   previous results while a calculation is scheduled or in flight. The covered
+   markup stays in the panel but is inert, so no stale row can be used. */
+.results-panel.loading > [data-skeleton-covered] { pointer-events: none; }
+.results-skeleton { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; gap: 12px; padding: inherit; overflow: hidden; border-radius: inherit; background: inherit; }
+.results-skeleton > * { flex: 0 1 auto; min-height: 0; overflow: hidden; }
+.results-skeleton .skeleton-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.skeleton-bar { display: block; border-radius: 6px; background: var(--panel-2); }
+.skeleton-row { display: block; border-radius: 6px; background: var(--line); }
+.skeleton-title { width: 92px; height: 14px; }
+.skeleton-chip { width: 68px; height: 17px; border-radius: 5px; }
+.results-skeleton .skeleton-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 0; }
+.skeleton-figure { width: 46%; max-width: 220px; height: 20px; }
+.skeleton-line { height: 10px; }
+.skeleton-wide { width: 74%; }
+.skeleton-medium { width: 42%; }
+.skeleton-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.skeleton-stat { height: 26px; }
+.skeleton-meter { width: 100%; height: 8px; margin-top: 2px; }
+.results-skeleton .skeleton-table { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.results-skeleton .skeleton-row { flex: 0 0 auto; height: 14px; }
+@keyframes skeleton-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+.results-skeleton :is(.skeleton-bar, .skeleton-row) { animation: skeleton-pulse 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .results-skeleton :is(.skeleton-bar, .skeleton-row) { animation: none; opacity: 1; } }
+.results-panel.is-stale > *:not(.results-head):not(.results-skeleton) { opacity: .55; }
 .json-result { max-height: 240px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
 .json-result:not(.visible), .tab-hidden { display: none; }
 .mobile-result-link { display: none; }
@@ -323,7 +353,9 @@ tr.best-row td:first-child { color: var(--cyan); }
 .field .format label { background: transparent; }
 .choice-row label, .conditions label { background: #162231; padding-inline: 6px; font-size: 11px; }
 .conditions { flex: 1; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); }
-.results-panel { position: static; max-height: none; padding: 16px; background: var(--panel); }
+/* `relative` is the containing block for the loading skeleton; `top: auto`
+   neutralises the sticky offset the first panel rule still declares. */
+.results-panel { position: relative; top: auto; max-height: none; padding: 16px; background: var(--panel); }
 .results-head { justify-content: flex-start; margin-bottom: 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .results-head > span { margin-left: auto; background: #20333f; padding: 3px 6px; border-radius: 5px; font-size: 10px; }
 .results-head p { display: block; min-width: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; color: var(--dim); font-size: 10px; }
@@ -424,7 +456,7 @@ dialog::backdrop { background: #02060bc9; }
   .mobile-result-link { position: fixed; z-index: 30; bottom: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #192e3e; font-size: 12px; }
   .mobile-result-link span { color: var(--cyan); }
 }
-@media (hover: none) { .move-delete { opacity: 1; } button, .move, .move-select { min-height: 36px; } }
+@media (hover: none) { .move-delete, .apply-spread { opacity: 1; } button, .move, .move-select { min-height: 36px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
 
 svg.side-icon { width: 18px; height: 18px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.5; }

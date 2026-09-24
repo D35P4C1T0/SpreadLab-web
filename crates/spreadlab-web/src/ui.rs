@@ -726,12 +726,12 @@ fn optimized_sp_row() -> String {
     ]
     .into_iter()
     .map(|(key, label)| {
-        format!(r#"<span><small>{label}</small><b data-optimized-sp="{key}">–</b></span>"#)
+        format!(r#"<span><small>{label}</small><b data-preview-sp="{key}">–</b></span>"#)
     })
     .collect::<Vec<_>>()
     .join("");
     format!(
-        r#"<div class="optimized-sp-preview"><div class="boost-hint">Optimized SPs <span>Result preview</span></div><div class="preview-stats">{cells}</div></div>"#
+        r#"<div class="optimized-sp-preview"><div class="boost-hint">Current SPs <span>Input</span></div><div class="preview-stats">{cells}</div></div>"#
     )
 }
 
@@ -880,6 +880,9 @@ mod tests {
         })).collect::<Vec<_>>();
         let html = matches_table(&matches);
         assert_eq!(html.matches("<tr class=").count(), 20);
+        // The server-rendered fallback has no result context, so it must not
+        // render inert Apply controls; the live table adds them client-side.
+        assert!(!html.contains("apply-spread"));
         assert!(html.contains("best-row"));
     }
 }

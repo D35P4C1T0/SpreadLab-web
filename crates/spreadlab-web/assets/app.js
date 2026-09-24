@@ -334,6 +334,10 @@ function renderCard(card, parsed) {
     card.querySelectorAll(`[data-sp-key="${key}"]`).forEach((input) => {
       input.value = value;
     });
+    card.querySelectorAll(`[data-preview-sp="${key}"]`).forEach((cell) => {
+      cell.textContent = value;
+      cell.classList.toggle("is-modified", value !== 0);
+    });
   }
   applyNatureClasses(card);
   syncToggleLabels();
@@ -552,8 +556,8 @@ function syncRawEditorValue(editor) {
 function applyNatureClasses(card) {
   const nature = card.querySelector("[data-card-nature]")?.value || "Hardy";
   const [boost, nerf] = natureEffects[nature] || [];
-  card.querySelectorAll("[data-sp-key], [data-optimized-sp]").forEach((input) => {
-    const stat = input.dataset.spKey || input.dataset.optimizedSp;
+  card.querySelectorAll("[data-sp-key], [data-preview-sp]").forEach((input) => {
+    const stat = input.dataset.spKey || input.dataset.previewSp;
     input.classList.toggle("nature-boost", stat === boost);
     input.classList.toggle("nature-nerf", stat === nerf);
   });
@@ -653,7 +657,7 @@ function initNatures() {
     row.addEventListener("mousedown", (event) => {
       if (event.button !== 0 || event.ctrlKey === event.altKey) return;
       const cell = event.target.closest("[data-sp-key], .preview-stats > span");
-      const stat = cell?.dataset.spKey || cell?.querySelector("[data-optimized-sp]")?.dataset.optimizedSp;
+      const stat = cell?.dataset.spKey || cell?.querySelector("[data-preview-sp]")?.dataset.previewSp;
       if (!stat) return;
       event.preventDefault();
       const select = row.closest("[data-set-card]")?.querySelector("[data-card-nature]");
@@ -700,6 +704,10 @@ function initRawEditors() {
         delete card.dataset.activeSavedSet;
         refreshSetLibrary(card);
       }
+      // The raw editor delays its own recalculation; the displayed rows and their
+      // apply actions must still go stale immediately so a stale Apply cannot
+      // overwrite what the user is typing.
+      invalidateWorkflow();
       syncRawEditorValue(editor);
       saveState();
       clearTimeout(renderTimer);
@@ -1563,44 +1571,262 @@ function cssEscape(value) {
   return String(value).replace(/["\\]/g, "\\$&");
 }
 
-let runController = null;
+// Calculation scheduling: one active workflow per page (including the
+// best-damage enrichment) plus at most one latest pending input. A newer input
+// invalidates the running workflow's output but never aborts it to start
+// another; once it settles the debounced latest input is submitted exactly
+// once. This keeps a burst of edits from launching N server calculations.
+const CALC_DEBOUNCE_MS = 320;
 
-function initRun() {
-  document.querySelector("form.workspace")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!canRunCalculation()) return;
-    const panel = document.querySelector(".results-panel");
-    runController?.abort();
-    const controller = new AbortController();
-    runController = controller;
-    panel.classList.add("loading");
-    const mobileResult = document.querySelector("[data-mobile-result]");
-    if (mobileResult) mobileResult.textContent = "Recalculating…";
-    panel.setAttribute("aria-busy", "true");
+let activeWorkflow = null;    // { generation, controller } while a run is active
+let workflowGeneration = 0;   // bumped on every input change to invalidate output
+let debounceTimer = null;
+let pendingRun = false;       // the latest valid input still needs a run
+let debounceDue = false;      // the debounce window has elapsed for that input
+// The ranked rows currently displayed. Apply actions map a row index back into
+// this response array instead of trusting values echoed into the markup.
+let currentResultContext = null; // { path, entries } while results are fresh
+
+// Results loading skeleton. While a valid calculation is scheduled or running --
+// including best-damage enrichment and work a newer edit has already superseded --
+// the displayed markup stays in place but inert while an opaque skeleton covers
+// it, so neither the old rows nor their Apply actions can be used. Only fresh
+// results, an error, or the waiting state replace the panel.
+const LOADING_LABEL = "Recalculating…";
+const LOADING_ANNOUNCEMENT = "Recalculating results";
+const SKELETON_TABLE_ROWS = 5;
+
+function resultsPanel() {
+  return document.querySelector(".results-panel");
+}
+
+function markResultsStale() {
+  resultsPanel()?.classList.add("is-stale");
+}
+
+// Any newer input makes the in-flight and displayed results obsolete.
+function invalidateWorkflow() {
+  workflowGeneration += 1;
+  markResultsStale();
+  invalidateApplyActions();
+}
+
+// Once inputs change the displayed rows no longer describe the current set, so
+// their apply actions must be inert until fresh results arrive.
+function invalidateApplyActions() {
+  currentResultContext = null;
+  resultsPanel()?.querySelectorAll("[data-apply-index]").forEach((button) => {
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+  });
+}
+
+function isLoadingCalculation() {
+  return Boolean(activeWorkflow) || (pendingRun && canRunCalculation());
+}
+
+// The ranked table size follows the ranked-limit input, so the placeholder
+// surface matches the shape the next result will have. The panel clips it when
+// the previous result was shorter, keeping the layout stable either way.
+function skeletonTableRows() {
+  const limit = Number(document.querySelector('[name="limit"]')?.value);
+  if (!Number.isFinite(limit) || limit <= 0) return SKELETON_TABLE_ROWS;
+  return Math.min(12, Math.max(3, Math.round(limit)));
+}
+
+function resultSkeletonMarkup() {
+  const bar = (classes) => `<span class="skeleton-bar ${classes}" aria-hidden="true"></span>`;
+  const stats = Array.from({ length: 6 }, () => bar("skeleton-stat")).join("");
+  const rows = Array.from({ length: skeletonTableRows() }, () => '<span class="skeleton-row" aria-hidden="true"></span>').join("");
+  return `<div class="results-skeleton" data-results-skeleton aria-hidden="true">
+  <div class="skeleton-head">${bar("skeleton-title")}${bar("skeleton-chip")}</div>
+  <div class="skeleton-card">${bar("skeleton-figure")}${bar("skeleton-line skeleton-wide")}${bar("skeleton-line skeleton-medium")}<div class="skeleton-stats">${stats}</div>${bar("skeleton-meter")}</div>
+  <div class="skeleton-table">${bar("skeleton-line skeleton-medium")}${rows}</div>
+</div>`;
+}
+
+function resultsLoadingStatus() {
+  let node = document.querySelector("[data-results-announcer]");
+  if (node) return node;
+  node = document.createElement("p");
+  node.className = "sr-only";
+  node.setAttribute("data-results-announcer", "");
+  node.setAttribute("role", "status");
+  resultsPanel()?.insertAdjacentElement("afterend", node);
+  return node;
+}
+
+// The covered rows are inert, so the busy panel stays silent; the single polite
+// announcement for a loading episode comes from this status region instead.
+function announceResultsLoading() {
+  const node = resultsLoadingStatus();
+  if (node && node.textContent !== LOADING_ANNOUNCEMENT) node.textContent = LOADING_ANNOUNCEMENT;
+}
+
+function clearResultsLoadingAnnouncement() {
+  const node = document.querySelector("[data-results-announcer]");
+  if (node?.textContent) node.textContent = "";
+}
+
+function coverStaleResults(panel) {
+  [...panel.children].forEach((node) => {
+    if (node.hasAttribute("data-results-skeleton")) return;
+    node.inert = true;
+    node.setAttribute("aria-hidden", "true");
+    node.setAttribute("data-skeleton-covered", "");
+  });
+}
+
+function uncoverStaleResults(panel) {
+  panel.querySelectorAll("[data-skeleton-covered]").forEach((node) => {
+    node.inert = false;
+    node.removeAttribute("aria-hidden");
+    node.removeAttribute("data-skeleton-covered");
+  });
+}
+
+function showLoadingSkeleton() {
+  const panel = resultsPanel();
+  if (!panel) return;
+  if (!panel.querySelector("[data-results-skeleton]")) {
+    coverStaleResults(panel);
+    panel.insertAdjacentHTML("beforeend", resultSkeletonMarkup());
+  }
+  panel.classList.add("loading");
+  panel.setAttribute("aria-busy", "true");
+  const mobileResult = document.querySelector("[data-mobile-result]");
+  if (mobileResult) mobileResult.textContent = LOADING_LABEL;
+  announceResultsLoading();
+}
+
+function hideLoadingSkeleton() {
+  const panel = resultsPanel();
+  if (!panel) return;
+  panel.querySelector("[data-results-skeleton]")?.remove();
+  uncoverStaleResults(panel);
+  panel.classList.remove("loading");
+  panel.setAttribute("aria-busy", "false");
+  clearResultsLoadingAnnouncement();
+}
+
+// Loading is derived from the scheduler rather than from one fetch: it starts
+// with a valid schedule and lasts through the debounce window, any superseded
+// run, and the best-damage enrichment of the run that owns the current input.
+function syncLoadingSkeleton() {
+  if (isLoadingCalculation()) showLoadingSkeleton();
+  else hideLoadingSkeleton();
+}
+
+function showWaitingResults() {
+  const panel = resultsPanel();
+  if (!panel) return;
+  hideLoadingSkeleton();
+  panel.classList.remove("is-stale");
+  invalidateApplyActions();
+  const mobileResult = document.querySelector("[data-mobile-result]");
+  if (mobileResult) mobileResult.textContent = "Waiting";
+  panel.innerHTML = `<div class="results-head"><b>Results</b><span>Waiting</span><p>Select a move</p></div><article class="best-card empty-state"><h2>Add a move</h2><p>Choose a move from the selector to calculate.</p></article>`;
+}
+
+function startWorkflow() {
+  const panel = resultsPanel();
+  const mobileResult = document.querySelector("[data-mobile-result]");
+  const generation = workflowGeneration;
+  const controller = new AbortController();
+  const workflow = { generation, controller };
+  activeWorkflow = workflow;
+  syncLoadingSkeleton();
+
+  (async () => {
     try {
       const { path, body } = currentPayload();
       const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
+      if (workflow.generation !== workflowGeneration) return;
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || response.statusText);
-      if (controller.signal.aborted) return;
+      if (workflow.generation !== workflowGeneration) return;
       await attachBestDamageRolls(data, path, body, controller.signal);
+      if (workflow.generation !== workflowGeneration) return;
       const rollsOpen = panel.querySelector(".damage-rolls")?.open || false;
       panel.innerHTML = renderResults(data);
       const rolls = panel.querySelector(".damage-rolls");
       if (rolls) rolls.open = rollsOpen;
+      currentResultContext = rankedResultContext(path, data);
       updateResultPresentation(data);
+      panel.classList.remove("is-stale");
       initShare();
     } catch (error) {
       if (error.name === "AbortError") return;
+      // A superseded run must never overwrite newer results or preview.
+      if (workflow.generation !== workflowGeneration) return;
       if (mobileResult) mobileResult.textContent = "Calculation failed";
-      clearOptimizedPreview();
+      invalidateApplyActions();
+      panel.classList.remove("is-stale");
       panel.innerHTML = `<div class="results-head"><b>Error</b><span>0 results</span></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
     } finally {
-      if (runController === controller) {
-        panel.classList.remove("loading");
-        panel.setAttribute("aria-busy", "false");
+      if (activeWorkflow === workflow) {
+        activeWorkflow = null;
+        // The skeleton outlives this request whenever a newer input is still
+        // waiting for its debounce, so a superseded run cannot reveal old rows.
+        syncLoadingSkeleton();
       }
+      // Drain the latest pending input once the active workflow is gone.
+      if (pendingRun && debounceDue && !activeWorkflow) flushPendingRun();
     }
+  })();
+}
+
+function flushPendingRun() {
+  clearTimeout(debounceTimer);
+  debounceTimer = null;
+  if (!pendingRun || !debounceDue) return;
+  // Never overlap workflows; the settling workflow drains this instead.
+  if (activeWorkflow) return;
+  if (!canRunCalculation()) {
+    pendingRun = false;
+    debounceDue = false;
+    syncLoadingSkeleton();
+    return;
+  }
+  pendingRun = false;
+  debounceDue = false;
+  startWorkflow();
+}
+
+function scheduleRun(due) {
+  clearTimeout(debounceTimer);
+  debounceTimer = null;
+  if (!canRunCalculation()) {
+    invalidateWorkflow();
+    // Keep any obsolete workflow in its slot until it settles; do not abort the
+    // client fetch, or a restored valid input could submit before the server job
+    // finishes and lose automatic recovery to a 503.
+    pendingRun = false;
+    debounceDue = false;
+    showWaitingResults();
+    return;
+  }
+  invalidateWorkflow();
+  pendingRun = true;
+  debounceDue = due;
+  // Show the skeleton as soon as a valid input is scheduled, so a pending
+  // replacement stays covered through its own debounce window.
+  syncLoadingSkeleton();
+  if (due) {
+    flushPendingRun();
+    return;
+  }
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    debounceDue = true;
+    flushPendingRun();
+  }, CALC_DEBOUNCE_MS);
+}
+
+function initRun() {
+  document.querySelector("form.workspace")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    scheduleRun(true);
   });
 }
 
@@ -1712,33 +1938,76 @@ function damageCard(summary, rolls = summary.rolls || [], optimized = false) {
   return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title"><div><b>${escapeHtml(move)}</b> <span class="type-badge ${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><small>vs. ${escapeHtml(defender)}</small></div>${optimized ? '<span class="result-status">Best spread</span>' : ""}</div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
 }
 
-function matchesTable(matches) {
-  const rows = matches.map((entry, index) => `<tr class="${index === 0 ? "best-row" : ""}"><td>${entry.rank ?? index + 1}${index === 0 ? '<span class="sr-only"> (best)</span>' : ''}</td><td>${escapeHtml(entry.nature || "–")}</td><td>${escapeHtml(spreadSummary(entry.sp_line))}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "–"}–${entry.result?.max_damage ?? entry.combined?.max_damage ?? "–"}</td></tr>`).join("");
-  return `<article class="table-card" data-tab-panel="all"><h2>All results</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Ranked optimizer results"><table><thead><tr><th scope="col">Rank</th><th scope="col">Nature</th><th scope="col">SPs</th><th scope="col">KO chance</th><th scope="col">Damage</th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
+function rankedEntries(data) {
+  return Array.isArray(data) ? data : (data.matches || []);
 }
 
-function clearOptimizedPreview() {
-  document.querySelectorAll("[data-optimized-sp]").forEach((cell) => {
-    cell.textContent = "–";
-    cell.classList.remove("is-modified");
-  });
+// Damage summaries carry no ranked rows, so they expose no apply actions.
+function rankedResultContext(path, data) {
+  if (data.summary) return null;
+  const entries = rankedEntries(data);
+  return entries.length ? { path, entries } : null;
+}
+
+function matchesTable(matches) {
+  const rows = matches.map((entry, index) => {
+    const rank = entry.rank ?? index + 1;
+    const nature = entry.nature || "–";
+    const label = `Apply spread rank ${rank}: ${nature}, ${spreadSummary(entry.sp_line)}`;
+    return `<tr class="${index === 0 ? "best-row" : ""}"><td>${rank}${index === 0 ? '<span class="sr-only"> (best)</span>' : ''}</td><td>${escapeHtml(nature)}</td><td>${escapeHtml(spreadSummary(entry.sp_line))}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "–"}–${entry.result?.max_damage ?? entry.combined?.max_damage ?? "–"}</td><td class="apply-cell"><button type="button" class="apply-spread" data-apply-index="${index}" aria-label="${escapeAttr(label)}">Apply spread</button></td></tr>`;
+  }).join("");
+  return `<article class="table-card" data-tab-panel="all"><h2>All results</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Ranked optimizer results"><table><thead><tr><th scope="col">Rank</th><th scope="col">Nature</th><th scope="col">SPs</th><th scope="col">KO chance</th><th scope="col">Damage</th><th scope="col"><span class="sr-only">Apply spread</span></th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
 }
 
 function updateResultPresentation(data) {
-  const matches = Array.isArray(data) ? data : (data.matches || []);
+  const matches = rankedEntries(data);
   const best = data.best || matches[0];
   const summary = data.summary || best?.result || best?.combined;
   const mobile = document.querySelector("[data-mobile-result]");
   if (mobile) mobile.textContent = summary ? `${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} HP · ${percent(summary.ko_chance)} KO` : "No matching spread";
-  clearOptimizedPreview();
-  if (best?.sp_line) {
-    const parsed = parseSet(`Preview\n${best.sp_line}`);
-    document.querySelectorAll("[data-optimized-sp]").forEach((cell) => {
-      const value = parsed.sps[cell.dataset.optimizedSp] || 0;
-      cell.textContent = value;
-      cell.classList.toggle("is-modified", value !== 0);
-    });
+}
+
+// Survival, sequence and defensive-optimization rows describe the defender;
+// KO (offensive) rows describe the attacker.
+function applyTargetCardKey(path) {
+  return path === "/api/ko" || path === "/api/optimize/offensive" ? "attacker" : "defender";
+}
+
+function fullSpsLine(sps) {
+  return `SPs: ${statOrder.map(([key, label]) => `${Number(sps[key] || 0)} ${label}`).join(" / ")}`;
+}
+
+function applySpreadRow(path, entry) {
+  const card = document.querySelector(`[data-set-card="${applyTargetCardKey(path)}"]`);
+  const editor = card?.querySelector(".raw-editor");
+  if (!card || !editor) return;
+  const sps = parseSet(`Applied\n${entry.sp_line || ""}`).sps;
+  let text = replaceOrInsertLine(editor.value, /^(SPs|EVs):/i, fullSpsLine(sps));
+  const nature = entry.nature;
+  const select = card.querySelector("[data-card-nature]");
+  if (nature && nature !== "Any" && select && [...select.options].some((option) => option.value === nature)) {
+    select.value = nature;
+    text = replaceOrInsertLine(text, / Nature$/i, `${nature} Nature`);
   }
+  editor.value = text;
+  delete card.dataset.activeSavedSet;
+  syncRawEditor(editor);
+  refreshSetLibrary(card);
+  saveState();
+  autoRun();
+}
+
+function initApplyActions() {
+  resultsPanel()?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-apply-index]");
+    if (!button || button.disabled) return;
+    const context = currentResultContext;
+    const index = Number(button.dataset.applyIndex);
+    if (!context || !Number.isInteger(index)) return;
+    const entry = context.entries[index];
+    if (!entry) return;
+    applySpreadRow(context.path, entry);
+  });
 }
 
 function syncAbilitySelector(card, parsed) {
@@ -1780,7 +2049,7 @@ function initAppShell() {
       });
     } else if (kind === "guides") {
       title.textContent = "Calculator guide";
-      content.innerHTML = `<div class="guide-copy"><h3>Build a matchup</h3><p>Choose Pokémon or a preset from each selector. Paste / edit set accepts Showdown text. Pick an attacking move and set its critical-hit toggle when needed.</p><h3>Find a spread</h3><p>Defensive mode minimizes investment while staying below your KO chance limit. Offensive mode finds the investment needed to reach your minimum KO chance. Nature “Any” lets the optimizer choose.</p><h3>Read the result</h3><p>Damage shows the HP range for the selected matchup. For 2HKO or 3HKO targets, the summary evaluates the combined sequence. Expand damage rolls to inspect individual rolls. Optimized SPs are a result preview, not editable locks.</p><h3>Battle state</h3><p>Active abilities can set terrain, weather, and boosts. Review conditions after changing Pokémon. All changes recalculate automatically.</p></div>`;
+      content.innerHTML = `<div class="guide-copy"><h3>Build a matchup</h3><p>Choose Pokémon or a preset from each selector. Paste / edit set accepts Showdown text. Pick an attacking move and set its critical-hit toggle when needed.</p><h3>Find a spread</h3><p>Defensive mode minimizes investment while staying below your KO chance limit. Offensive mode finds the investment needed to reach your minimum KO chance. Nature “Any” lets the optimizer choose. Ranked rows stay advisory until you hover, focus, or tap a row and choose Apply spread, which copies that row's SPs and nature onto the matching set.</p><h3>Read the result</h3><p>Damage shows the HP range for the selected matchup. For 2HKO or 3HKO targets, the summary evaluates the combined sequence. Expand damage rolls to inspect individual rolls. The SPs under each set show its current investment, so results never overwrite the set on their own.</p><h3>Battle state</h3><p>Active abilities can set terrain, weather, and boosts. Review conditions after changing Pokémon. All changes recalculate automatically.</p></div>`;
     } else {
       title.textContent = kind === "saved" ? "Saved sets" : "Metagame presets";
       const sets = kind === "saved" ? savedSets : builtInSets;
@@ -1861,16 +2130,8 @@ function syncToggleLabels() {
   });
 }
 
-let autoRunTimer = null;
 function autoRun() {
-  clearTimeout(autoRunTimer);
-  if (!canRunCalculation()) {
-    runController?.abort();
-    const panel = document.querySelector(".results-panel");
-    if (panel) panel.innerHTML = `<div class="results-head"><b>Results</b><span>Waiting</span><p>Select a move</p></div><article class="best-card empty-state"><h2>Add a move</h2><p>Choose a move from the selector to calculate.</p></article>`;
-    return;
-  }
-  autoRunTimer = setTimeout(() => document.querySelector("form.workspace")?.requestSubmit(), 320);
+  scheduleRun(false);
 }
 
 function escapeHtml(value) {
@@ -1919,6 +2180,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   ]);
   initShare();
   initRun();
+  initApplyActions();
   initSetLibraries();
   initAppShell();
   initToggles();
