@@ -94,6 +94,37 @@ cargo run --release -p spreadlab-web -- serve --host 127.0.0.1 --port 3000
 
 Release builds do not include or run live-reload middleware.
 
+## Deployment checks
+
+`GET /healthz` returns an empty HTTP 204 after application data has loaded. It
+performs no calculation or external request; use `/healthz` as Render's health
+check path. Keep Render's root directory unset, Dockerfile `./Dockerfile`, and
+build context `.` so all workspace dependencies are available.
+
+On SIGTERM or Ctrl-C, the server stops accepting connections and drains active
+requests. The hosting platform's termination deadline still applies to long
+calculations.
+
+Run the same real-process checks as CI with Python 3 (no Python dependencies):
+
+```sh
+cargo build --locked --release -p spreadlab-web
+python3 tools/smoke_web.py
+# Or check an already-running Docker/local service:
+python3 tools/smoke_web.py --url http://127.0.0.1:3000
+```
+
+The checks cover health, all six page routes, byte-identical CSS/JavaScript,
+metadata, exact baseline damage rolls, survival optimizer rankings, and invalid
+API input. When starting its
+own binary, the script also verifies `PORT`, CLI precedence, and clean SIGTERM
+shutdown, and always cleans up its temporary server.
+
+Live engine oracle tests remain optional for ordinary local runs. Setting
+`NCP_REFERENCE` explicitly makes the reference checkout mandatory: a missing or
+incorrect path fails the tests instead of silently skipping them. CI always sets
+this variable to the pinned checkout.
+
 ## Docker
 
 Build and run with Docker:
@@ -113,7 +144,9 @@ Or with Compose:
 docker compose up -d --build
 ```
 
-The container serves on `0.0.0.0:3000`. Put it behind Caddy, Traefik, Nginx, or another reverse proxy for HTTPS.
+The container serves on `0.0.0.0:3000` by default. It honors the `PORT`
+environment variable supplied by Render and other hosts; an explicit `--port`
+argument takes precedence. Put it behind Caddy, Traefik, Nginx, or another reverse proxy for HTTPS.
 
 Sprite and item images are fetched on demand and cached under:
 

@@ -15,10 +15,33 @@ use damage_calc::{
 
 fn pinned_reference() -> Option<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let reference = env::var_os("NCP_REFERENCE")
+    let configured = env::var_os("NCP_REFERENCE");
+    let required = configured.is_some();
+    let reference = configured
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("reference/NCP-VGC-Damage-Calculator"));
-    reference.exists().then_some(reference)
+    validated_reference(reference, required)
+}
+
+fn validated_reference(reference: PathBuf, required: bool) -> Option<PathBuf> {
+    let available = reference.join("script_res/damage_SV.js").is_file();
+    assert!(
+        !required || available,
+        "NCP_REFERENCE is configured but its calculator is missing: {}",
+        reference.display()
+    );
+    available.then_some(reference)
+}
+
+#[test]
+#[should_panic(expected = "NCP_REFERENCE is configured but its calculator is missing")]
+fn explicit_missing_reference_is_an_error() {
+    validated_reference(PathBuf::from(file!()).join("missing-reference"), true);
+}
+
+#[test]
+fn optional_missing_reference_can_be_skipped() {
+    assert!(validated_reference(PathBuf::from(file!()).join("missing-reference"), false).is_none());
 }
 
 fn run_oracle(input: &serde_json::Value, reference: &PathBuf) -> serde_json::Value {
