@@ -1,0 +1,5 @@
+Kingambit
+Ability: Defiant
+SPs: 32 Atk
+Adamant Nature
+- Iron Head

@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Workspace tests
+        run: cargo test --locked --workspace
+
+      - name: Optimizer WebAssembly library
+        run: cargo build --locked -p spreadlab-rs --lib --target wasm32-unknown-unknown
+
+      - name: Web application release build
+        run: cargo build --locked --release -p spreadlab-web
+
+  engine-reference:
+    name: Engine reference oracle
+    runs-on: ubuntu-latest
+    env:
+      NCP_REFERENCE: ${{ github.workspace }}/reference/NCP-VGC-Damage-Calculator
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.94.1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check out pinned JavaScript reference
+        run: |
+          git clone https://github.com/nerd-of-now/NCP-VGC-Damage-Calculator.git "$NCP_REFERENCE"
+          git -C "$NCP_REFERENCE" checkout 1369b359b85f0a6343df006acde92cc4a7d07805
+
+      - name: Engine tests against the pinned JavaScript oracle
+        run: cargo test --locked -p pkmn-dmg-lib
+
+      - name: Engine tests with serde
+        run: cargo test --locked -p pkmn-dmg-lib --features serde
+
+      - name: Reference inventory matches vendored data
+        working-directory: crates/pkmn-dmg-lib-rs
+        run: node tools/reference/inventory.mjs --check data/champions/generated/reference-inventory.json
+
+      - name: Reference scope check
+        working-directory: crates/pkmn-dmg-lib-rs
+        run: node tools/reference/check-scope.mjs
+
+      - name: Regenerated Champions constants are committed
+        working-directory: crates/pkmn-dmg-lib-rs
+        run: python3 tools/generate_champions_rust.py
+
+      - name: Generated data is unchanged
+        run: git diff --exit-code -- crates/pkmn-dmg-lib-rs
+
+      - name: Engine packaging contents
+        run: cargo package --list -p pkmn-dmg-lib
+
+  web-ui:
+    name: Web UI integration
+    runs-on: ubuntu-latest
+    env:
+      SPREADLAB_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.94.1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install browser test dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Build web server
+        run: cargo build --locked -p spreadlab-web
+
+      - name: Start web server
+        run: |
+          ./target/debug/spreadlab-web serve --host 127.0.0.1 --port 3000 > server.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3000/api/meta > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat server.log
+          exit 1
+
+      - name: Browser catalog checks
+        run: pnpm test:catalog
+
+      - name: Browser workspace checks
+        run: pnpm test:ui
+
+      - name: Server log
+        if: always()
+        run: cat server.log
+
+  docker:
+    name: Native Docker deployment build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build native production image
+        run: docker compose build

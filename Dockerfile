@@ -1,8 +1,8 @@
-FROM rust:bookworm AS builder
+FROM rust:1.94.1-bookworm AS builder
 
 WORKDIR /app
 COPY . .
-RUN cargo build --release -p spreadlab-web
+RUN cargo build --release --locked -p spreadlab-web
 
 FROM debian:bookworm-slim
 

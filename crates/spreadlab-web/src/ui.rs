@@ -212,11 +212,7 @@ fn calculation_panel(mode: Mode) -> String {
 }
 
 fn pokemon_sets(mode: Mode) -> String {
-    let defender_label = if mode == Mode::Ko {
-        "Defender"
-    } else {
-        "Defender"
-    };
+    let defender_label = "Defender";
     format!(
         r#"<section class="panel sets">
   <div class="section-title sets-title"><div><b>Matchup</b></div><button class="swap-action" type="button" aria-label="Swap attacker and defender"><span>⇄</span> Swap sides</button></div>

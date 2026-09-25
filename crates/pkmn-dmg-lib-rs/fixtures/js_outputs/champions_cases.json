@@ -1,0 +1,29 @@
+{
+  "source": "reference/NCP-VGC-Damage-Calculator/script_res/damage_SV.js + damage_MASTER.js, Champions gen=10",
+  "cases": [
+    {
+      "name": "neutral_non_stab",
+      "expected_damage_rolls": [16, 16, 16, 16, 16, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 19],
+      "expected_min": 16,
+      "expected_max": 19
+    },
+    {
+      "name": "stab",
+      "expected_damage_rolls": [24, 24, 24, 24, 24, 25, 25, 25, 25, 25, 27, 27, 27, 27, 27, 28],
+      "expected_min": 24,
+      "expected_max": 28
+    },
+    {
+      "name": "burn_reflect",
+      "expected_damage_rolls": [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7],
+      "expected_min": 6,
+      "expected_max": 7
+    },
+    {
+      "name": "sun_fire_stab_super_effective",
+      "expected_damage_rolls": [152, 156, 158, 158, 162, 162, 164, 168, 168, 170, 170, 174, 176, 176, 180, 182],
+      "expected_min": 152,
+      "expected_max": 182
+    }
+  ]
+}

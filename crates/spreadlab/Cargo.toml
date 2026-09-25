@@ -1,0 +1,32 @@
+[package]
+name = "spreadlab-rs"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+license = "MIT"
+description = "Alpha Pokemon Champions Stat Point optimizer CLI and library"
+repository.workspace = true
+homepage = "https://github.com/D35P4C1T0/SpreadLab-web"
+readme = "README.md"
+keywords = ["pokemon", "champions", "optimizer", "vgc"]
+categories = ["command-line-utilities"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+damage_calc.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+
+[features]
+default = []
+
+[dev-dependencies]
+tempfile = "3"

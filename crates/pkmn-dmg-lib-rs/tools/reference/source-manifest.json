@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/nerd-of-now/NCP-VGC-Damage-Calculator.git",
+  "commit": "1369b359b85f0a6343df006acde92cc4a7d07805",
+  "auditedAt": "2026-09-14",
+  "files": {
+    "script_res/damage_SV.js": "91a03edd19805b3d101e0a37231e87573b03a0f08a28966fdec97c73ba9c9f2c",
+    "script_res/damage_MASTER.js": "7af419c58751b06d6e2e21f7f2f12fb797289f565558a86e614ab0a9c1ae8e68",
+    "script_res/ko_chance.js": "42487c88108fde388e6a97d844ad95fd80e1823e316a1e2d55c300f6456a9a32",
+    "script_res/stat_data.js": "4e0cfd94e6796c137a9ba6cce28724927c2db37c746136574a86ac24c208a15b",
+    "script_res/type_data.js": "f1fe4ab101d4a7ae13aa2d21658490df0924d1e3bf8ee19c2ea1870bcb36927a",
+    "script_res/ability_data.js": "7f5e71f5204f92f441d13324367426cd38745a98658e50c60d1e8bb2cadebddd",
+    "script_res/item_data.js": "7fef551dc97f3c12b7c557820d852c2c55039960a0b35baa4d11083aeee67d78",
+    "script_res/move_data.js": "a37c7f624011c07a7d6620b74bca46a3da8faa684c2e7bea6d50235a033209ec",
+    "script_res/pokedex.js": "2e2a49a76bbc104486f8ea65623b1e21b727d8cb73a2a1123c3ac17b52915985",
+    "script_res/setdex_ncp-g10.js": "da68ddc22af57e156727980e05a46dcf2e31f1bfd80ea6a47b88fb2df173f443",
+    "script_res/ap_calc.js": "a4f9c1fe16af18a9d9545b1788d50b2d97f56a7bc84c5363e1ba18d940fa09ba",
+    "script_res/nature_data.js": "7adc03e1df3acc26a1cb790155c2b1983eb2e954b12ad6f793a17cd5ac56f8d3"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "defender_set": "Mega Salamence\nHardy Nature",
+  "hits": [
+    {
+      "attacker_set": "Dragapult @ Life Orb\nSPs: 32 SpA\nHardy Nature",
+      "move_name": "Dragon Pulse",
+      "move_times_affected": 0
+    }
+  ],
+  "max_ko_chances": [0.25],
+  "search": {
+    "result_mode": "AllMinima"
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "ruleset": "Pokemon Champions Regulation M-C normal dex",
+  "generation": 10,
+  "entrypoints": ["CALCULATE_ALL_MOVES_SV", "GET_DAMAGE_SV", "getKOChanceText"],
+  "includedFiles": [
+    "script_res/damage_SV.js",
+    "script_res/damage_MASTER.js",
+    "script_res/ko_chance.js",
+    "script_res/stat_data.js",
+    "script_res/type_data.js",
+    "script_res/ability_data.js",
+    "script_res/item_data.js",
+    "script_res/move_data.js",
+    "script_res/pokedex.js",
+    "script_res/setdex_ncp-g10.js"
+  ],
+  "excluded": {
+    "browserPresentation": "HTML, CSS, JQuery events, DOM descriptions, local storage, audio, and images do not affect semantic library results",
+    "legacyGenerations": "Generation 1-9 entrypoints are unreachable when gen is 10",
+    "legendsZA": "gen == 9.5 branches are unreachable when gen is 10",
+    "dynamaxAndMax": "not available in Champions Regulation M-C normal dex",
+    "zMoves": "not available in Champions Regulation M-C normal dex",
+    "championsNatDex": "separate future milestone",
+    "optimizer": "Rust-only feature, absent from reference damage engine"
+  },
+  "functions": {
+    "entrypoints": {
+      "status": "included",
+      "names": ["CALCULATE_ALL_MOVES_SV", "GET_DAMAGE_SV", "GET_DAMAGE_HANDLER"]
+    },
+    "preprocessing": {
+      "status": "included",
+      "names": [
+        "checkTrace", "checkNeutralGas", "checkAirLock", "checkForecast",
+        "checkMimicry", "checkTerastal", "checkKlutz", "checkSeeds",
+        "checkParadoxAbilities", "checkSupersweetSyrup", "checkIntimidate",
+        "checkSwordShield", "checkWindRider", "checkEvo", "checkDownload",
+        "checkEmbodyAspect", "checkBattleBond", "checkInfiltrator",
+        "getFinalSpeed", "setHighestStat", "getWeightMods"
+      ]
+    },
+    "moveResolution": {
+      "status": "included",
+      "names": [
+        "checkMoveTypeChange", "checkConditionalPriority",
+        "checkConditionalSpread", "checkContactOverride", "statusMoves",
+        "abilityIgnore", "critMove", "checkAbilityTypeChange",
+        "immunityChecks", "setDamage", "pIsGrounded"
+      ]
+    },
+    "damagePipeline": {
+      "status": "included",
+      "names": [
+        "basePowerFunc", "calcBPMods", "canTeraBoost60BP", "calcAttack",
+        "calcAtMods", "calcDefense", "calcDefMods", "calcBaseDamage",
+        "calcGeneralMods", "calcFinalMods", "checkAddCalcQualifications",
+        "canBeBurned", "additionalDamageCalcs", "chainMods", "pokeRound",
+        "getMoveEffectiveness", "getSingleTypeEffectiveness",
+        "overrideTypeEffectiveness", "getModifiedStat", "usesPhysicalAttack",
+        "countBoosts", "setIsQuarteredByProtect", "NaturalGift"
+      ]
+    },
+    "koPipeline": {
+      "status": "included",
+      "names": [
+        "getKOChanceText", "damageArrToDict", "arrayToProbabilityDict",
+        "getKOChance", "verifyKOChance", "predictTotal", "getRestoreHP",
+        "applyRipen", "getRestoreThreshold", "getAllEndOfTurnEffects",
+        "checkThresholdCriteria", "eotProcess", "numericSortParseInt",
+        "sortByKeys"
+      ]
+    },
+    "championsStats": {
+      "status": "included",
+      "names": ["CALC_HP_CHAMP", "CALC_STAT_CHAMP"]
+    },
+    "presentation": {
+      "status": "excluded",
+      "names": [
+        "numericSort", "buildDescription", "appendIfSet", "toSmogonStat",
+        "addLevelDesc", "getHPInfo", "serializeText"
+      ],
+      "reason": "browser text formatting is outside semantic library parity"
+    },
+    "unreachable": {
+      "status": "excluded",
+      "names": [
+        "additionalTypeEffectModsLegendsZA", "ZMoves", "MaxMoves",
+        "NaturePower", "checkMeFirst", "HiddenPower", "secondLeastSigBit",
+        "handleMultiHitGen1", "checkWhiteHerb", "changeStatBoosts",
+        "CALC_HP_RBY", "CALC_STAT_RBY", "CALC_HP_ADV", "CALC_STAT_ADV",
+        "CALC_HP_LGPE", "CALC_STAT_LGPE"
+      ],
+      "reason": "generation or mode guards make these unreachable in declared scope"
+    }
+  },
+  "additionalHelpers": {
+    "script_res/ap_calc.js": {
+      "function": "calcUserHP",
+      "coveredBranches": [
+        "Pain Split",
+        "Leech Seed (Big Root, Liquid Ooze, Magic Guard)"
+      ],
+      "excludedBranches": "Existing recoil, draining moves, other self-damage/recovery, and presentation remain outside the result-component API."
+    }
+  },
+  "unknown": []
+}
