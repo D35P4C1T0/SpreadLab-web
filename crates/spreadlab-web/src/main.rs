@@ -1818,7 +1818,9 @@ mod tests {
 
         let locked = api_survive(
             State(state),
-            Json(request(json!({ "locked": { "special_attack": 0, "speed": 0 } }))),
+            Json(request(
+                json!({ "locked": { "special_attack": 0, "speed": 0 } }),
+            )),
         )
         .await
         .unwrap()

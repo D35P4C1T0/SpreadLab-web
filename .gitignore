@@ -9,3 +9,11 @@
 
 # Local agent plans, reports, and diagnostic artifacts
 /docs/agent-work/
+
+# Local browser/agent artifacts
+/.playwright-mcp/
+/.serena/
+/*-verified.png
+/dark-two-pokemon-selectors.png
+/pokemon-selector-final.png
+/select2-pokemon-selector.png

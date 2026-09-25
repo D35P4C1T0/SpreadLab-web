@@ -1,12 +1,30 @@
-# SpreadLab Web
+# SpreadLab
 
-Dedicated Rust WebUI for [SpreadLab](https://github.com/D35P4C1T0/SpreadLab), a Pokémon Champions damage and spread optimization tool for:
+Unified Rust workspace for the SpreadLab damage engine, optimizer, CLI, and
+Axum/Leptos web application. Supports:
 
 ```text
 [Gen 9 Champions] VGC 2026 Reg M-C
 ```
 
-The app is an Axum server with server-rendered Rust UI and a small client-side script for calculator interactions. It consumes the upstream `spreadlab-rs` public API and does not copy damage formulas, stat conversion logic, or optimizer internals.
+The app is an Axum server with server-rendered Rust UI and a small client-side script for calculator interactions. It consumes the local `spreadlab-rs` public API and does not copy damage formulas, stat conversion logic, or optimizer internals.
+
+## Monorepo layout
+
+This repository is the single Cargo workspace for the whole SpreadLab stack:
+
+| Path | Package | Role |
+| --- | --- | --- |
+| `crates/pkmn-dmg-lib-rs` | `pkmn-dmg-lib` (library `damage_calc`) | Pokémon damage calculation engine |
+| `crates/spreadlab` | `spreadlab-rs` | Optimization library, CLI, and WebAssembly exports |
+| `crates/spreadlab-web` | `spreadlab-web` | Axum + Leptos SSR web application |
+
+Dependencies flow one way: `spreadlab-web` -> `spreadlab-rs` -> `pkmn-dmg-lib`;
+the web app also uses `pkmn-dmg-lib` directly.
+They are wired through workspace path dependencies, so a local edit in the
+engine or the optimizer is compiled into the web app on the next build. No
+intermediate repository, branch, or pinned-revision update is needed while
+developing.
 
 ## Features
 
@@ -30,10 +48,24 @@ by James Watkins and are used under the MIT license. The retained license is in
 
 ## Run
 
+Install Rust through rustup; `rust-toolchain.toml` selects Rust/Cargo 1.94.1,
+including Clippy, rustfmt, and the optimizer Wasm target. All packages declare
+Rust 1.94.1 as the supported minimum. CI and Docker use the same pinned toolchain.
+
 From the repository root:
 
 ```sh
 cargo run -p spreadlab-web -- serve --host 127.0.0.1 --port 3000
+```
+
+The optimizer CLI and the full workspace are available from the same root:
+
+```sh
+cargo run -p spreadlab-rs -- --help
+cargo test --workspace
+cargo test -p pkmn-dmg-lib            # calculation engine in isolation
+cargo build -p spreadlab-rs --lib --target wasm32-unknown-unknown
+cargo build --release -p spreadlab-web
 ```
 
 Then open:
@@ -113,7 +145,9 @@ crates/spreadlab-web/assets/item-sprites
 Useful checks:
 
 ```sh
-cargo fmt --all --check
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 cargo check -p spreadlab-web
 node --check crates/spreadlab-web/assets/app.js
 ```
@@ -122,9 +156,13 @@ Cached remote sprites are written under `crates/spreadlab-web/assets/sprites-sta
 
 ## Regulation M-C data
 
-The web app pins the M-C [damage engine](https://github.com/D35P4C1T0/pkmn-dmg-lib-rs/commit/96f55ef04e66d882457af4f009f228de0e73afdc)
-and [SpreadLab adapter](https://github.com/D35P4C1T0/SpreadLab/commit/13582e8c87ebb15b95ce805413396395961c87df).
-Both dependencies were refreshed from upstream on 2026-09-14.
+The M-C damage engine (`crates/pkmn-dmg-lib-rs`) and SpreadLab adapter
+(`crates/spreadlab`) now live in this workspace. They were imported from
+[`pkmn-dmg-lib-rs` commit `96f55ef`](https://github.com/D35P4C1T0/pkmn-dmg-lib-rs/commit/96f55ef04e66d882457af4f009f228de0e73afdc)
+and [`SpreadLab` commit `db5d932`](https://github.com/D35P4C1T0/SpreadLab/commit/db5d93254aac506d7aa8a70b088a7625b8154f77),
+the revisions the web application consumed in production before the migration.
+The engine also includes the test-only `b055a90736a6a6e7568fd4de87ebfd6b5efba661`
+commit; no newer formulas or data were imported. See [migration verification](MIGRATION.md).
 Species, moves, abilities, and items come from these dependencies, including all
 23 newly usable species, their forms, six Megas, and the 12 new held items.
 The engine refreshed its source data from [Project Pokémon champout](https://github.com/projectpokemon/champout)
@@ -150,19 +188,21 @@ ability state and manual field/stage inputs without applying entry effects.
 library's conditional activation input. Mechanics regression tests live in the
 library repositories.
 
-For coordinated local library development, use `.cargo/config.toml` (ignored):
+Local library development happens in this repository. The engine and the
+optimizer are ordinary workspace members, referenced from the web app through
+`[workspace.dependencies]` in the root `Cargo.toml`:
 
 ```toml
-[patch."https://github.com/D35P4C1T0/SpreadLab.git"]
-spreadlab-rs = { path = "../SpreadLab" }
-
-[patch."https://github.com/D35P4C1T0/pkmn-dmg-lib-rs.git"]
-pkmn-dmg-lib = { path = "../pkmn-dmg-lib" }
+[dependencies]
+damage_calc.workspace = true
+spreadlab-rs.workspace = true
 ```
 
-This builds against sibling checkouts without changing production revision pins.
-After publishing library changes, update the pins and regenerate `Cargo.lock`
-without these local overrides before deployment.
+Editing `crates/pkmn-dmg-lib-rs` or `crates/spreadlab` and rebuilding the web
+app is enough; there is no git pin to bump and no `[patch]` override to maintain.
+The old `.cargo/config.toml` sibling-checkout patches are obsolete and can be
+deleted. Concurrency and calculation behavior remain owned by the library
+crates.
 
 ## UI development and browser checks
 

@@ -1,0 +1,18 @@
+/target/
+/.idea/
+/.vscode/
+.DS_Store
+*.log
+*.tmp
+*.bak
+
+# Local development overrides.
+.env
+.env.*
+!.env.example
+
+# Local damage-lib patch scratch files should stay local.
+Cargo.toml.orig
+
+# Local agent reports and benchmark artifacts.
+/docs/agent-work/

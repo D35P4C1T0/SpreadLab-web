@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Checkout pinned JavaScript reference
+        run: |
+          git clone https://github.com/nerd-of-now/NCP-VGC-Damage-Calculator.git reference/NCP-VGC-Damage-Calculator
+          git -C reference/NCP-VGC-Damage-Calculator checkout 1369b359b85f0a6343df006acde92cc4a7d07805
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test
+        env:
+          NCP_REFERENCE: reference/NCP-VGC-Damage-Calculator
+      - run: cargo test --features serde
+        env:
+          NCP_REFERENCE: reference/NCP-VGC-Damage-Calculator
+      - run: node tools/reference/inventory.mjs --check data/champions/generated/reference-inventory.json
+        env:
+          NCP_REFERENCE: reference/NCP-VGC-Damage-Calculator
+      - run: node tools/reference/check-scope.mjs
+        env:
+          NCP_REFERENCE: reference/NCP-VGC-Damage-Calculator
+      - run: python3 tools/generate_champions_rust.py
+      - run: git diff --exit-code
+      - run: cargo package --list

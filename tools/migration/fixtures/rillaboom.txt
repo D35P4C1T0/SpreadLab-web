@@ -1,0 +1,6 @@
+Rillaboom @ Grassy Seed
+Ability: Grassy Surge
+Adamant Nature
+SPs: 32 Atk
+- Drum Beating
+- Knock Off

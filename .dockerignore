@@ -1,7 +1,14 @@
 /.git
-/target
+**/target
 **/*.rs.bk
+# Local, machine-specific cargo overrides are not part of the image build.
+/.cargo/config.toml
 /crates/spreadlab-web/assets/sprites
 /crates/spreadlab-web/assets/sprites-static
 /crates/spreadlab-web/assets/item-sprites
+# Frontend test tooling and agent artifacts.
+/node_modules
+/.playwright-mcp
+/.serena
+/*.png
 .DS_Store
