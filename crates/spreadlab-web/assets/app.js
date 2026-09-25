@@ -404,9 +404,20 @@ function renderMoveSelector() {
   const currentMoves = parseSet(document.querySelector('[data-set-card="attacker"] .raw-editor')?.value || "").moves;
   const available = moveList.filter((move) => !currentMoves.includes(move));
   const full = currentMoves.length >= 4;
-  select.innerHTML = `<option value="">${full ? "Four moves selected" : "Add a move…"}</option>` + available
-    .map((move) => `<option value="${escapeAttr(move)}">${escapeHtml(move)}</option>`)
-    .join("");
+  // Keep unchanged options mounted: rebuilding the full catalog stalls card edits.
+  if (!select.options.length) select.add(new Option("", ""));
+  select.options[0].text = full ? "Four moves selected" : "Add a move…";
+  const wanted = new Set(available);
+  const existing = new Map([...select.options].slice(1).map(option => [option.value, option]));
+  for (const [move, option] of existing) {
+    if (!wanted.has(move)) option.remove();
+  }
+  let previous = select.options[0];
+  for (const move of available) {
+    const option = existing.get(move) || new Option(move, move);
+    if (previous.nextElementSibling !== option) select.insertBefore(option, previous.nextElementSibling);
+    previous = option;
+  }
   select.value = "";
   select.disabled = full;
 }
