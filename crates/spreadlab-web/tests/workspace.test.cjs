@@ -29,6 +29,55 @@ async function recalculate(page, action, endpoint = '/api/survive') {
   return result.json();
 }
 
+test('common Pokémon catalog preserves ranking, forms, and selectable sets', async () => {
+  const page = await browser.newPage();
+  await ready(page, '/damage');
+  const catalog = await page.evaluate(() => {
+    const common = builtInSets.filter(set => set.id.startsWith('common:'));
+    return { count: common.length, missing: common.filter(set => !speciesList.includes(set.pokemon)).map(set => set.pokemon) };
+  });
+  assert.equal(catalog.count, 125);
+  assert.deepEqual(catalog.missing, []);
+  await page.locator('[data-open-dialog="metagame"]').click();
+  assert.equal(await page.locator('[data-library-source]').inputValue(), 'current');
+  await page.locator('[data-library-source]').selectOption('common');
+  const rows = page.locator('[data-library-set]');
+  assert.equal(await rows.count(), 125);
+  assert.match(await rows.nth(0).innerText(), /Kingambit/);
+  assert.match(await rows.nth(1).innerText(), /Charizard/);
+  await page.locator('[data-library-search]').fill('Charizard');
+  await rows.filter({ hasText: '#2 ·' }).click();
+  const raw = await page.locator('[name="attacker_set"]').inputValue();
+  assert.match(raw, /Mega Charizard Y/);
+  assert.match(raw, /Charizardite Y/);
+  assert.match(raw, /Ability: Drought/);
+  assert.match(raw, /SPs:/);
+  await page.locator('[data-open-dialog="metagame"]').click();
+  await page.locator('[data-library-source]').selectOption('all');
+  assert.ok(await rows.count() > 125);
+  await page.close();
+});
+
+test('MC presets expose Rillaboom with its competitive ability and spread', async () => {
+  const page = await browser.newPage();
+  await ready(page, '/damage');
+  await page.locator('[data-open-dialog="metagame"]').click();
+  assert.equal(await page.locator('[data-library-source]').inputValue(), 'current');
+  await page.locator('[data-library-search]').fill('Rillaboom');
+  const rows = page.locator('[data-library-set]');
+  assert.equal(await rows.count(), 2);
+  await rows.filter({ hasText: 'Basic Miracle Seed' }).click();
+  const raw = await page.locator('[name="attacker_set"]').inputValue();
+  assert.match(raw, /Rillaboom @ Miracle Seed/);
+  assert.match(raw, /Ability: Grassy Surge/);
+  assert.match(raw, /32 HP \/ 32 Atk \/ 2 SpD/);
+  assert.match(raw, /Grassy Glide/);
+  await page.locator('[data-open-dialog="metagame"]').click();
+  await page.locator('[data-library-search]').fill('Indeedee');
+  assert.ok(await rows.count() >= 2);
+  await page.close();
+});
+
 for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768], [390, 844]]) {
   test(`workspace geometry and real damage at ${width}×${height}`, async () => {
     const page = await browser.newPage({ viewport: { width, height } });

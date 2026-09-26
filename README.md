@@ -231,8 +231,11 @@ keyboard conditions, crit persistence, sets, forms, swapping, and failure states
 
 The desktop app shell keeps Optimization above the matchup and Field Conditions
 above Results, with a compact left navigation rail. Saved Sets and Metagame open
-searchable local set libraries; Metagame shows bundled presets, not live usage
-rankings. Guides explains the calculator, and Settings selects a persisted dark
+searchable local set libraries; Metagame defaults to Regulation MC competitive
+presets, including Rillaboom and Indeedee. The August MB usage snapshot remains
+available as an explicitly historical view. See
+[common-set refresh instructions](crates/spreadlab-web/README.md#common-sets).
+Guides explains the calculator, and Settings selects a persisted dark
 palette. Below 1200px the right workspace follows the matchup; below 900px the
 order is Attacker, Defender, Battle Conditions, Optimization, Results.
 

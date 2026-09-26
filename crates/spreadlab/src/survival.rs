@@ -1,5 +1,5 @@
-//! Exact minimum-investment search. No stat-dependency or monotonicity pruning.
-use crate::damage_bridge::{build_pokemon, calculate_benchmark, DamageBenchmark};
+//! Exact minimum-investment search with dependency-aware evaluation reuse.
+use crate::damage_bridge::{build_pokemon, DamageBenchmark};
 use crate::data::ChampionsData;
 use crate::optimize::{
     all_natures, canonical_nature, canonical_natures, canonicalize_natures,
@@ -312,6 +312,10 @@ pub fn survival_search(
     natures.sort_by_key(|n| nature_index(*n));
     natures.dedup();
     let species = data.species(&first.defender.species)?;
+    let mut damage = benchmarks
+        .iter()
+        .map(|benchmark| crate::search_damage::SearchDamage::new(data, benchmark))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut matches = Vec::new();
     let mut closest_miss: Option<ExactSurvivalSpread> = None;
     let mut minimum_total = None;
@@ -330,12 +334,9 @@ pub fn survival_search(
                 let starting_hp = current_hp_from_percent(final_stats.hp, hp_percent);
                 let mut results = Vec::with_capacity(benchmarks.len());
                 let mut ko_chances = Vec::with_capacity(expected);
-                for benchmark in benchmarks {
-                    let mut candidate = benchmark.clone();
-                    candidate.defender.nature = nature;
-                    candidate.defender.stat_points = sps;
-                    candidate.defender_current_hp = Some(starting_hp);
-                    let result = calculate_benchmark(data, &candidate)?;
+                for evaluator in &mut damage {
+                    let result =
+                        evaluator.calculate(nature, sps, starting_hp, evaluator.initial_item())?;
                     if matches!(evaluation, SurvivalEvaluation::Sequence { .. })
                         && !matches!(
                             result.outcome,
@@ -363,6 +364,7 @@ pub fn survival_search(
                         final_stats.hp,
                         starting_hp,
                         end_turn_after,
+                        &mut damage,
                     )?;
                     ko_chances = vec![combined.ko_chance];
                     Some(combined)
@@ -442,6 +444,7 @@ pub fn survival_search(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::damage_bridge::calculate_benchmark;
 
     #[test]
     fn missing_probability_requires_a_known_zero_damage_outcome() {

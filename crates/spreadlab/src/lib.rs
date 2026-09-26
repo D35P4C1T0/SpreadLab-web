@@ -3,6 +3,7 @@ pub mod damage_bridge;
 pub mod data;
 pub mod optimize;
 pub mod relevance;
+mod search_damage;
 pub mod showdown;
 pub mod spreads;
 pub mod stats;

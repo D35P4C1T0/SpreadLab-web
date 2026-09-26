@@ -53,6 +53,14 @@ pub fn calculate_benchmark(
     data: &ChampionsData,
     benchmark: &DamageBenchmark,
 ) -> Result<DamageResult, BridgeError> {
+    evaluate_input(prepare_benchmark(data, benchmark)?)
+}
+
+/// Resolve names and battle settings once before an optimizer visits its candidates.
+pub(crate) fn prepare_benchmark(
+    data: &ChampionsData,
+    benchmark: &DamageBenchmark,
+) -> Result<CalcInput, BridgeError> {
     let mut attacker = build_pokemon(data, &benchmark.attacker)?;
     let mut defender = build_pokemon(data, &benchmark.defender)?;
     let mut move_ = build_move(data, &benchmark.move_name, &benchmark.attacker)?;
@@ -70,14 +78,17 @@ pub fn calculate_benchmark(
     if let Some(current_hp) = benchmark.defender_current_hp {
         defender.current_hp = Some(current_hp);
     }
-    calculate_damage(CalcInput {
+    Ok(CalcInput {
         attacker,
         defender,
         move_,
         field: benchmark.field,
         ruleset: Ruleset::Champions,
     })
-    .map_err(|error| BridgeError::Damage(error.to_string()))
+}
+
+pub(crate) fn evaluate_input(input: CalcInput) -> Result<DamageResult, BridgeError> {
+    calculate_damage(input).map_err(|error| BridgeError::Damage(error.to_string()))
 }
 
 pub(crate) fn build_move(

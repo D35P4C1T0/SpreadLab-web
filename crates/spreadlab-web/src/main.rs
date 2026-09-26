@@ -212,6 +212,7 @@ fn watch_dev_assets(reloader: Reloader) {
         "crates/spreadlab-web/assets/app.css",
         "crates/spreadlab-web/assets/app.js",
         "crates/spreadlab-web/assets/setdex_ncp-g10.js",
+        "crates/spreadlab-web/assets/common-sets.js",
     ];
     tokio::spawn(async move {
         let mut previous = dev_asset_versions(WATCHED_ASSETS).await;
@@ -496,7 +497,7 @@ async fn api_species_abilities() -> Json<HashMap<String, Vec<String>>> {
 
     let parsed: ChampionsDataJson = serde_json::from_str(damage_calc::data::CHAMPIONS_DATA_JSON)
         .unwrap_or(ChampionsDataJson { species: vec![] });
-    let map = parsed
+    let mut map: HashMap<String, Vec<String>> = parsed
         .species
         .into_iter()
         .map(|species| {
@@ -506,9 +507,30 @@ async fn api_species_abilities() -> Json<HashMap<String, Vec<String>>> {
                 .map(|ability| ability.name)
                 .collect::<Vec<_>>();
             abilities.dedup();
+            // Presets can omit an ability when they use the reference species default.
+            // Put that default first so browser imports do not select a different one.
+            if let Some(reference) =
+                damage_calc::data::champions::champions_reference_species(&species.display_name)
+            {
+                abilities.sort_by_key(|name| {
+                    spreadlab_rs::data::parse_ability(name).ok() != Some(reference.default_ability)
+                });
+            }
             (species.display_name, abilities)
         })
         .collect();
+    // Preserve reference aliases used in preset files (for example Indeedee-F).
+    // Their competitive defaults can differ from the canonical species' first ability.
+    for species in damage_calc::data::champions::CHAMPIONS_REFERENCE_SPECIES {
+        if let Some((name, _)) = damage_calc::data::champions::CHAMPIONS_REFERENCE_ABILITY_VALUES
+            .iter()
+            .find(|(_, ability)| *ability == species.default_ability)
+        {
+            let abilities = map.entry(species.name.to_owned()).or_default();
+            abilities.retain(|ability| ability != name);
+            abilities.insert(0, (*name).to_owned());
+        }
+    }
     Json(map)
 }
 
@@ -1494,6 +1516,14 @@ mod tests {
         let meta = api_meta(State(state.clone())).await.unwrap().0;
         let types = api_species_types(State(state)).await.0;
         let abilities = api_species_abilities().await.0;
+        assert_eq!(
+            abilities["Rillaboom"].first().map(String::as_str),
+            Some("Grassy Surge")
+        );
+        assert_eq!(
+            abilities["Indeedee-F"].first().map(String::as_str),
+            Some("Psychic Surge")
+        );
         let additions = [
             "Wigglytuff",
             "Persian",

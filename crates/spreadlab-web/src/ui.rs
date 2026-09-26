@@ -142,7 +142,8 @@ fn render_shell(title: &str, body: String) -> String {
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
         <link rel="stylesheet" href="/assets/app.css?v=20260913-2"/>
         <script src="/assets/setdex_ncp-g10.js?v=1369b359"></script>
-        <script defer src="/assets/app.js?v=20260913-2"></script>
+        <script src="/assets/common-sets.js?v=202608-mb"></script>
+        <script defer src="/assets/app.js?v=20260926-2"></script>
             </head>
             <body inner_html=body></body>
         </html>
