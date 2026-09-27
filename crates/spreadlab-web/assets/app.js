@@ -1621,7 +1621,6 @@ let currentResultContext = null; // { path, entries } while results are fresh
 // results, an error, or the waiting state replace the panel.
 const LOADING_LABEL = "Recalculating…";
 const LOADING_ANNOUNCEMENT = "Recalculating results";
-const SKELETON_TABLE_ROWS = 5;
 
 function resultsPanel() {
   return document.querySelector(".results-panel");
@@ -1652,23 +1651,20 @@ function isLoadingCalculation() {
   return Boolean(activeWorkflow) || (pendingRun && canRunCalculation());
 }
 
-// The ranked table size follows the ranked-limit input, so the placeholder
-// surface matches the shape the next result will have. The panel clips it when
-// the previous result was shorter, keeping the layout stable either way.
-function skeletonTableRows() {
-  const limit = Number(document.querySelector('[name="limit"]')?.value);
-  if (!Number.isFinite(limit) || limit <= 0) return SKELETON_TABLE_ROWS;
-  return Math.min(12, Math.max(3, Math.round(limit)));
-}
-
+// A bounded preview keeps the summary legible even when the requested result
+// count is large. Preserve the panel's existing geometry while work is pending.
 function resultSkeletonMarkup() {
-  const bar = (classes) => `<span class="skeleton-bar ${classes}" aria-hidden="true"></span>`;
-  const stats = Array.from({ length: 6 }, () => bar("skeleton-stat")).join("");
-  const rows = Array.from({ length: skeletonTableRows() }, () => '<span class="skeleton-row" aria-hidden="true"></span>').join("");
+  const bar = (classes = "") => `<span class="skeleton-bar ${classes}" aria-hidden="true"></span>`;
+  const stats = ["HP", "Atk", "Def", "SpA", "SpD", "Spe"]
+    .map((label) => `<div class="skeleton-stat"><span>${label}</span>${bar("skeleton-value")}</div>`).join("");
+  const rows = Array.from({ length: 3 }, () => `<div class="skeleton-row" aria-hidden="true">${bar("skeleton-rank")}${bar("skeleton-spread")}${bar("skeleton-nature")}${bar("skeleton-score")}</div>`).join("");
   return `<div class="results-skeleton" data-results-skeleton aria-hidden="true">
-  <div class="skeleton-head">${bar("skeleton-title")}${bar("skeleton-chip")}</div>
-  <div class="skeleton-card">${bar("skeleton-figure")}${bar("skeleton-line skeleton-wide")}${bar("skeleton-line skeleton-medium")}<div class="skeleton-stats">${stats}</div>${bar("skeleton-meter")}</div>
-  <div class="skeleton-table">${bar("skeleton-line skeleton-medium")}${rows}</div>
+  <div class="skeleton-head"><b>Results</b><span class="skeleton-status"><i></i>Calculating…</span></div>
+  <div class="skeleton-card">
+    <div class="skeleton-summary"><div>${bar("skeleton-caption")}${bar("skeleton-figure")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div></div>
+    <div class="skeleton-stats">${stats}</div>
+  </div>
+  <div class="skeleton-table">${rows}</div>
 </div>`;
 }
 
