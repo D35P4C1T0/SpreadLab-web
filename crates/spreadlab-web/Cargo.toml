@@ -11,7 +11,7 @@ readme = "../../README.md"
 [dependencies]
 anyhow = "1"
 axum = { version = "0.7", features = ["macros"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 leptos = { version = "0.8.6", features = ["ssr"] }
 leptos_meta = { version = "0.8.6", features = ["ssr"] }
 leptos_router = { version = "0.8.6", features = ["ssr"] }
@@ -21,7 +21,7 @@ serde_json = "1"
 damage_calc.workspace = true
 spreadlab-rs.workspace = true
 thiserror = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "time", "signal"] }
 tower-http = { version = "0.5", features = ["fs", "trace"] }
 tower-livereload = "0.10.3"
 tracing = "0.1"

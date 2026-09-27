@@ -38,7 +38,7 @@ enum Command {
     Serve {
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
-        #[arg(long, default_value_t = 3000)]
+        #[arg(long, env = "PORT", default_value_t = 3000)]
         port: u16,
     },
 }
@@ -166,6 +166,7 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
     let state = AppState::new(data);
     let assets = ServeDir::new("crates/spreadlab-web/assets");
     let app = Router::new()
+        .route("/healthz", get(|| async { StatusCode::NO_CONTENT }))
         .route("/", get(page_damage))
         .route("/damage", get(page_damage).post(form_damage))
         .route("/survive", get(page_survive).post(form_survive))
@@ -202,8 +203,34 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("serving SpreadLab WebUI at http://{addr}");
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal()?)
+        .await?;
     Ok(())
+}
+
+// Register SIGTERM before serving so deployment restarts drain active requests.
+fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    #[cfg(unix)]
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+
+    Ok(async move {
+        let termination = async {
+            #[cfg(unix)]
+            terminate.recv().await;
+            #[cfg(not(unix))]
+            std::future::pending::<()>().await;
+        };
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(error) = result {
+                    tracing::error!(%error, "failed to listen for Ctrl-C");
+                }
+            }
+            _ = termination => {}
+        }
+        tracing::info!("shutdown requested; draining active requests");
+    })
 }
 
 #[cfg(debug_assertions)]

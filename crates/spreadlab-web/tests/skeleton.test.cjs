@@ -475,3 +475,29 @@ test('the skeletal layout stays inside a mobile viewport', async () => {
   assert.equal(state.panel.x >= 0 && state.panel.x + state.panel.width <= 390, true, 'the panel stays inside the viewport');
   await page.close();
 });
+
+
+test('large result limits preserve the summary on desktop and mobile', async () => {
+  for (const [width, theme] of [[1440, 'dark'], [390, 'slate']]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await openLoading(page);
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    const before = await page.locator('.results-panel').boundingBox();
+    await page.locator('[name="limit"]').fill('100');
+    const layout = await page.evaluate(() => {
+      const panel = document.querySelector('.results-panel').getBoundingClientRect();
+      const figure = document.querySelector('.skeleton-figure').getBoundingClientRect();
+      const stats = [...document.querySelectorAll('.skeleton-value')].map(node => {
+        const box = node.getBoundingClientRect();
+        return { height: box.height, bottom: box.bottom };
+      });
+      return { panelHeight: panel.height, panelBottom: panel.bottom, figureHeight: figure.height, stats };
+    });
+    assert.equal(layout.panelHeight, before.height, 'loading does not resize the result panel');
+    assert.ok(layout.figureHeight >= 20, 'the primary result placeholder must not collapse');
+    assert.ok(layout.stats.every(stat => stat.height >= 10 && stat.bottom <= layout.panelBottom),
+      'stat placeholders remain visible instead of being squeezed by table rows');
+    assert.equal((await loadingState(page)).pageScrollWidth, width, 'no horizontal overflow');
+    await page.close();
+  }
+});
