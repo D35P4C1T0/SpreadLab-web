@@ -88,7 +88,8 @@ pub(super) fn ko_chances_after_move_uses(
     if max_uses == 0 {
         return chances;
     }
-    // Preserve getKOChance's first-use shortcuts, which use the net residual sum.
+    // Preserve the reference shortcuts for damage and healing-item handling.
+    // Net residual healing requires per-roll evaluation: it cannot undo a KO.
     let (&min, _) = damage.first_key_value().expect("nonempty damage");
     let (&max, _) = damage.last_key_value().expect("nonempty damage");
     let multihit = hit_rolls.len() > 1;
@@ -104,7 +105,9 @@ pub(super) fn ko_chances_after_move_uses(
         } else {
             0
         };
-    chances.push(if max.damage - eot_sum < max_target {
+    chances.push(if eot_sum > 0 {
+        chance(&first, target_hp, recovery)
+    } else if max.damage - eot_sum < max_target {
         0.0
     } else if min.damage - eot_sum >= min_target {
         1.0

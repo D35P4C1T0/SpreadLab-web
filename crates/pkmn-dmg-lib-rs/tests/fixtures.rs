@@ -1703,6 +1703,73 @@ fn focus_sash_can_be_broken_by_later_multi_hit_hits() {
 }
 
 #[test]
+fn grassy_terrain_cannot_heal_a_wood_hammer_ohko() {
+    let mut attacker = Pokemon::champions(
+        "Rillaboom",
+        [Some(PokemonType::Grass), None],
+        StatTable::new(100, 125, 90, 60, 70, 85),
+        StatTable::new(0, 32, 0, 0, 0, 0),
+        Nature::Adamant,
+    );
+    attacker.item = Item::MiracleSeed;
+    let defender = Pokemon::champions(
+        "Farigiraf",
+        [Some(PokemonType::Normal), Some(PokemonType::Psychic)],
+        StatTable::new(120, 90, 70, 110, 70, 60),
+        StatTable::new(0, 0, 28, 0, 0, 0),
+        Nature::Hardy,
+    );
+    let result = calc(
+        attacker,
+        defender,
+        Move::new("Wood Hammer", 120, PokemonType::Grass, Category::Physical),
+        Field {
+            terrain: Terrain::Grassy,
+            ..Field::default()
+        },
+    );
+    assert_eq!(
+        result.damage_rolls,
+        vec![174, 175, 178, 180, 181, 184, 186, 189, 190, 192, 195, 196, 198, 201, 202, 205,]
+    );
+    assert_eq!(result.ko_chance, Some(0.375));
+    assert_eq!(result.ko_chance_by_move_use, vec![0.375, 1.0, 1.0, 1.0]);
+}
+
+#[test]
+fn residual_recovery_cannot_prevent_exact_hp_ohkos() {
+    for (item, terrain) in [
+        (Item::Leftovers, Terrain::None),
+        (Item::None, Terrain::Grassy),
+        (Item::Leftovers, Terrain::Grassy),
+    ] {
+        for (hp, expected) in [(99, 1.0), (100, 1.0), (101, 0.0)] {
+            let mut attacker = stat_100_mon("Attacker", PokemonType::Fighting);
+            attacker.level = 100;
+            let mut defender = stat_100_mon("Defender", PokemonType::Normal);
+            defender.max_hp_override = Some(hp);
+            defender.current_hp = Some(hp);
+            defender.item = item;
+            let result = calc(
+                attacker,
+                defender,
+                Move::new("Seismic Toss", 1, PokemonType::Fighting, Category::Physical),
+                Field {
+                    terrain,
+                    ..Field::default()
+                },
+            );
+            assert_eq!(result.damage_rolls, vec![100]);
+            assert_eq!(
+                result.ko_chance,
+                Some(expected),
+                "{item:?}, {terrain:?}, {hp} HP"
+            );
+        }
+    }
+}
+
+#[test]
 fn leftovers_recovery_is_counted_between_repeated_ko_odds() {
     let attacker = stat_100_mon("Attacker", PokemonType::Fighting);
     let mut defender = stat_100_mon("Defender", PokemonType::Normal);

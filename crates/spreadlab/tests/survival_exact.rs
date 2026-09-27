@@ -41,6 +41,42 @@ fn key(spread: &ExactSurvivalSpread) -> (String, u16, u16, u16) {
 }
 
 #[test]
+fn grassy_terrain_survival_search_counts_lethal_hits_before_recovery() {
+    let data = ChampionsData::load().unwrap();
+    let mut b = benchmark(
+        "Rillaboom @ Miracle Seed\nSPs: 32 Atk\nAdamant Nature",
+        "Farigiraf\nSPs: 28 Def\nHardy Nature",
+        "Wood Hammer",
+    );
+    b.field.terrain = damage_calc::Terrain::Grassy;
+    let damage = calculate_benchmark(&data, &b).unwrap();
+    assert_eq!((damage.min_damage, damage.max_damage), (174, 205));
+    assert_eq!(damage.ko_chance, Some(0.375));
+
+    let result = hp_def_survival_search(&data, &b, &[Nature::Hardy], 0.125, 10).unwrap();
+    assert!(!result.matches.is_empty());
+    for spread in result.matches {
+        b.defender.stat_points = spread.sps;
+        let damage = calculate_benchmark(&data, &b).unwrap();
+        let hp = champions_final_stats(
+            data.species(&b.defender.species).unwrap().base_stats(),
+            spread.nature,
+            spread.sps,
+        )
+        .unwrap()
+        .hp;
+        let lethal = damage
+            .damage_rolls
+            .iter()
+            .filter(|&&roll| roll >= hp)
+            .count();
+        let probability = lethal as f32 / damage.damage_rolls.len() as f32;
+        assert_eq!(spread.result.ko_chance, Some(probability));
+        assert!(probability <= 0.125);
+    }
+}
+
+#[test]
 fn dragon_pulse_global_minimum_beats_both_reported_spreads() {
     let data = ChampionsData::load().unwrap();
     let mut b = dragon();
