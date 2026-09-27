@@ -297,6 +297,7 @@ function renderCard(card, parsed) {
   card.querySelector('[data-field="ability"]')?.replaceChildren(document.createTextNode(parsed.ability));
   const abilityToggle = card.querySelector("[data-ability-toggle]");
   if (abilityToggle) abilityToggle.checked = parsed.abilityEnabled ?? true;
+  syncAbilityTerrain(card, parsed);
   card.querySelector('[data-field="item"]')?.replaceChildren(document.createTextNode(parsed.item));
   const itemSprite = card.querySelector("[data-item-sprite]");
   if (itemSprite) {
@@ -1657,16 +1658,76 @@ function resultSkeletonMarkup() {
   const bar = (classes = "") => `<span class="skeleton-bar ${classes}" aria-hidden="true"></span>`;
   const stats = ["HP", "Atk", "Def", "SpA", "SpD", "Spe"]
     .map((label) => `<div class="skeleton-stat"><span>${label}</span>${bar("skeleton-value")}</div>`).join("");
-  const rows = Array.from({ length: 3 }, () => `<div class="skeleton-row" aria-hidden="true">${bar("skeleton-rank")}${bar("skeleton-spread")}${bar("skeleton-nature")}${bar("skeleton-score")}</div>`).join("");
+  const rows = Array.from({ length: 6 }, () => `<div class="skeleton-row" aria-hidden="true">${bar("skeleton-rank")}${bar("skeleton-nature")}${bar("skeleton-spread")}${bar("skeleton-score")}${bar("skeleton-score")}${bar("skeleton-action")}</div>`).join("");
   return `<div class="results-skeleton" data-results-skeleton aria-hidden="true">
   <div class="skeleton-head"><b>Results</b><span class="skeleton-status"><i></i>Calculating…</span></div>
-  <div class="skeleton-card">
-    <div class="skeleton-summary"><div>${bar("skeleton-caption")}${bar("skeleton-figure")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div></div>
+  <div class="skeleton-card skeleton-damage">
+    <div class="skeleton-move">${bar("skeleton-move-name")}${bar("skeleton-opponent")}</div>
+    <div class="skeleton-summary"><div>${bar("skeleton-caption")}${bar("skeleton-figure")}${bar("skeleton-percent")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div></div>
+    <div class="skeleton-meter-slot">${bar("skeleton-meter")}</div>
+    <div class="skeleton-rolls-slot">${bar("skeleton-rolls")}</div>
+  </div>
+  <div class="skeleton-card skeleton-best">
+    <div class="skeleton-spread-summary">${bar("skeleton-nature")}${bar("skeleton-spread")}</div>
+    ${location.pathname.includes("ko") ? "" : `<div class="skeleton-target-slot">${bar("skeleton-target")}</div>`}
     <div class="skeleton-stats">${stats}</div>
   </div>
-  <div class="skeleton-table">${rows}</div>
+  <div class="skeleton-table"><h2>All results</h2><div class="skeleton-table-body"><div class="skeleton-row skeleton-table-head" aria-hidden="true">${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-action")}</div>${rows}</div></div>
 </div>`;
 }
+
+// Align structural slots, never text fragments. Placeholders retain their own
+// clean shapes while section starts, columns, and row spacing match the result.
+function alignResultSkeleton(panel) {
+  const skeleton = panel.querySelector("[data-results-skeleton]");
+  if (!skeleton || !panel.querySelector(":scope > .damage-card")) return;
+  skeleton.classList.add("skeleton-matched");
+  const place = (source, target, parent = skeleton) => {
+    const content = panel.querySelector(`:scope > ${source}`);
+    const slot = skeleton.querySelector(target);
+    if (!slot) return;
+    slot.hidden = !content || content.getBoundingClientRect().height === 0;
+    if (slot.hidden) return;
+    const box = content.getBoundingClientRect();
+    const origin = parent.getBoundingClientRect();
+    Object.assign(slot.style, {
+      position: "absolute", left: `${box.left - origin.left}px`,
+      top: `${box.top - origin.top}px`, width: `${box.width}px`, height: `${box.height}px`,
+    });
+  };
+  for (const [source, target] of [
+    [".results-head", ".skeleton-head"],
+    [".damage-card", ".skeleton-damage"],
+    [".best-card:not(.empty-state):not(.error-card)", ".skeleton-best"],
+    [".table-card", ".skeleton-table"],
+  ]) place(source, target);
+  const damage = skeleton.querySelector(".skeleton-damage");
+  for (const [source, target] of [
+    [".damage-title", ".skeleton-move"], [".damage-grid", ".skeleton-summary"],
+    [".meter", ".skeleton-meter-slot"], [".damage-rolls summary", ".skeleton-rolls-slot"],
+  ]) place(`.damage-card ${source}`, target, damage);
+  const best = skeleton.querySelector(".skeleton-best");
+  for (const [source, target] of [
+    [".spread-summary", ".skeleton-spread-summary"], [".target-hp", ".skeleton-target-slot"],
+    [".final-stats", ".skeleton-stats"],
+  ]) place(`.best-card ${source}`, target, best);
+  const table = skeleton.querySelector(".skeleton-table");
+  place(".table-card h2", ".skeleton-table h2", table);
+  place(".table-card .table-scroll", ".skeleton-table-body", table);
+  const columns = [...panel.querySelectorAll(":scope > .table-card th")];
+  if (columns.length) {
+    table.style.setProperty("--skeleton-columns", columns.map(column => `${column.getBoundingClientRect().width}px`).join(" "));
+    const header = panel.querySelector(":scope > .table-card thead");
+    skeleton.querySelector(".skeleton-table-head").style.height = `${header.getBoundingClientRect().height}px`;
+    const rows = [...panel.querySelectorAll(":scope > .table-card tbody tr")];
+    skeleton.querySelectorAll(".skeleton-table-body > .skeleton-row:not(.skeleton-table-head)").forEach((row, index) => {
+      row.hidden = index >= rows.length;
+      if (!row.hidden) row.style.height = `${rows[index].getBoundingClientRect().height}px`;
+    });
+  }
+}
+
+let resultSkeletonObserver;
 
 function resultsLoadingStatus() {
   let node = document.querySelector("[data-results-announcer]");
@@ -1714,6 +1775,9 @@ function showLoadingSkeleton() {
   if (!panel.querySelector("[data-results-skeleton]")) {
     coverStaleResults(panel);
     panel.insertAdjacentHTML("beforeend", resultSkeletonMarkup());
+    alignResultSkeleton(panel);
+    resultSkeletonObserver = new ResizeObserver(() => alignResultSkeleton(panel));
+    resultSkeletonObserver.observe(panel);
   }
   panel.classList.add("loading");
   panel.setAttribute("aria-busy", "true");
@@ -1725,6 +1789,8 @@ function showLoadingSkeleton() {
 function hideLoadingSkeleton() {
   const panel = resultsPanel();
   if (!panel) return;
+  resultSkeletonObserver?.disconnect();
+  resultSkeletonObserver = null;
   panel.querySelector("[data-results-skeleton]")?.remove();
   uncoverStaleResults(panel);
   panel.classList.remove("loading");
@@ -2031,6 +2097,33 @@ function initApplyActions() {
     if (!entry) return;
     applySpreadRow(context.path, entry);
   });
+}
+
+function activeAbilityTerrain(parsed) {
+  if (parsed.abilityEnabled === false) return "";
+  return {
+    electricsurge: "Electric",
+    grassysurge: "Grassy",
+    mistysurge: "Misty",
+    psychicsurge: "Psychic",
+    hadronengine: "Electric",
+    seedsower: "Grassy",
+  }[normalizeName(parsed.ability)] || "";
+}
+
+function syncAbilityTerrain(card, parsed) {
+  const terrain = activeAbilityTerrain(parsed);
+  const previous = card.dataset.abilityTerrain || "";
+  card.dataset.abilityTerrain = terrain;
+  if (terrain === previous) return;
+  if (terrain) {
+    setRadio("terrain", terrain);
+  } else if (document.querySelector('input[name="terrain"]:checked')?.value === previous) {
+    const other = [...document.querySelectorAll("[data-set-card]")].find(peer => peer !== card);
+    const otherSet = other?.querySelector(".raw-editor")?.value || "";
+    setRadio("terrain", activeAbilityTerrain(parseSet(otherSet)) || "None");
+  }
+  syncToggleLabels();
 }
 
 function syncAbilitySelector(card, parsed) {

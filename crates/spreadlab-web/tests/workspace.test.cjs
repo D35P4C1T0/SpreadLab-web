@@ -360,3 +360,46 @@ test('species search excludes unrelated presets with fuzzy title matches', async
   await page.waitForFunction(() => [...document.querySelectorAll('[data-set-card="attacker"] [data-pokemon-option]')].some(node => node.dataset.pokemonName === 'Talonflame'));
   await page.close();
 });
+
+test('active terrain abilities update either side, toggles, and calculation payloads', { timeout: 60000 }, async () => {
+  const page = await browser.newPage();
+  page.setDefaultTimeout(10000);
+  let submittedTerrain;
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/api/survive' && request.method() === 'POST') submittedTerrain = request.postDataJSON().field.terrain;
+  });
+  await ready(page);
+  const terrain = () => page.locator('input[name="terrain"]:checked').inputValue();
+  const setAbility = async (side, ability) => {
+    await recalculate(page, () => page.evaluate(({ side, ability }) => {
+      const editor = document.querySelector(`[data-set-card="${side}"] .raw-editor`);
+      editor.value = replaceOrInsertLine(editor.value, /^Ability:/i, `Ability: ${ability}`);
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { side, ability }));
+  };
+  for (const side of ['attacker', 'defender']) {
+    for (const [ability, expected] of [
+      ['Electric Surge', 'Electric'], ['Grassy Surge', 'Grassy'],
+      ['Misty Surge', 'Misty'], ['Psychic Surge', 'Psychic'],
+      ['Hadron Engine', 'Electric'], ['Seed Sower', 'Grassy'],
+    ]) {
+      await setAbility(side, ability);
+      assert.equal(await terrain(), expected);
+      assert.equal(submittedTerrain, expected);
+      assert.equal(await page.locator(`input[name="terrain"][value="${expected}"]`).evaluate(input => input.closest('label').classList.contains('is-on')), true);
+      assert.equal(await page.evaluate(() => collectState().field.terrain), expected);
+    }
+    await setAbility(side, 'None');
+  }
+  await setAbility('attacker', 'Grassy Surge');
+  await setAbility('defender', 'Psychic Surge');
+  const defenderToggle = page.locator('[data-set-card="defender"] [data-ability-toggle]');
+  await recalculate(page, () => defenderToggle.uncheck());
+  assert.equal(await terrain(), 'Grassy');
+  await recalculate(page, () => defenderToggle.check());
+  assert.equal(await terrain(), 'Psychic');
+  await recalculate(page, () => page.locator('input[name="terrain"][value="Misty"]').check());
+  await recalculate(page, () => page.locator('[data-set-card="attacker"] [data-sp-key="atk"]').first().fill('24'));
+  assert.equal(await terrain(), 'Misty');
+  await page.close();
+});

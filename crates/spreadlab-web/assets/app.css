@@ -244,6 +244,7 @@ tr:hover .apply-spread, tr:focus-within .apply-spread { opacity: 1; }
 .result-actions:not(:has(button:not(:disabled))) { display: none; }
 /* Preserve the covered result's dimensions; placeholders never shrink to fit
    a large result limit or make the panel jump during recalculation. */
+.results-panel.loading:not(:has(> .damage-card)) { min-height: 640px; }
 .results-panel.loading > [data-skeleton-covered] { pointer-events: none; }
 .results-skeleton { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; padding: inherit; overflow: hidden; border-radius: inherit; background: var(--panel); }
 .results-skeleton .skeleton-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -251,25 +252,61 @@ tr:hover .apply-spread, tr:focus-within .apply-spread { opacity: 1; }
 .skeleton-status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
 .skeleton-status i { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cyan) 8%, transparent); }
 .skeleton-bar { display: block; flex: none; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 15%, var(--panel)); }
-.results-skeleton .skeleton-card { flex: 0 0 auto; padding: 20px 0 16px; }
-.skeleton-summary { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); gap: 16px; align-items: end; }
+.results-skeleton .skeleton-card { flex: 0 0 auto; padding: 16px 0; }
+.skeleton-summary { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); gap: 12px; align-items: center; }
 .skeleton-summary > div { min-width: 0; display: grid; gap: 12px; }
-.skeleton-summary > div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.skeleton-summary > div + div { padding-left: 12px; border-left: 1px solid var(--line); }
 .skeleton-caption { width: 60%; max-width: 65px; height: 6px; }
 .skeleton-figure { width: 85%; max-width: 150px; height: 26px; background: color-mix(in srgb, var(--cyan) 14%, var(--panel)); }
 .skeleton-secondary { width: 75%; max-width: 58px; height: 20px; }
-.skeleton-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-top: 22px; }
+.skeleton-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .skeleton-stat { display: grid; justify-items: center; gap: 8px; }
 .skeleton-stat > span:first-child { color: var(--dim); font-size: 10px; }
 .skeleton-value { width: 24px; height: 12px; }
 .results-skeleton .skeleton-table { flex: 1 1 auto; min-height: 0; overflow: hidden; padding-top: 6px; border-top: 1px solid var(--line); mask-image: linear-gradient(to bottom, #000 65%, transparent 100%); }
-.results-skeleton .skeleton-row { display: grid; grid-template-columns: 12px minmax(0, 1fr) 50px 40px; align-items: center; gap: 16px; height: 32px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.results-skeleton .skeleton-row { display: grid; grid-template-columns: 16px 48px minmax(0, 1fr) 52px 56px; align-items: center; gap: 10px; height: 37px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .skeleton-rank { width: 8px; height: 8px; }
 .skeleton-spread { width: 78%; max-width: 170px; }
 .skeleton-row:nth-child(2) .skeleton-spread { width: 62%; }
 .skeleton-row:nth-child(3) .skeleton-spread { width: 88%; }
 .skeleton-nature { width: 36px; }
-.skeleton-score { width: 28px; justify-self: end; }
+.skeleton-score { width: 75%; }
+.skeleton-move { display: grid; gap: 8px; margin-bottom: 18px; }
+.skeleton-move-name { width: 145px; height: 18px; }
+.skeleton-opponent { width: 95px; height: 12px; }
+.skeleton-percent { width: 90px; height: 13px; }
+.skeleton-meter { width: 100%; height: 4px; margin: 18px 0 16px; }
+.skeleton-rolls { width: 90px; height: 10px; margin-bottom: 0; }
+.results-skeleton .skeleton-best { padding-top: 0; }
+.skeleton-spread-summary { display: flex; gap: 12px; align-items: center; }
+.skeleton-target { width: 75px; height: 13px; margin-top: 12px; }
+.skeleton-table h2 { margin: 12px 0; font-size: 13px; font-weight: 600; }
+
+.skeleton-action { width: 55%; }
+.skeleton-row { grid-template-columns: 16px 48px minmax(0, 1fr) 52px 56px 0; }
+.skeleton-row > .skeleton-action { display: none; }
+.results-skeleton.skeleton-matched > * { flex: none; min-height: 0; }
+.skeleton-matched .skeleton-card { padding: 0; }
+.skeleton-matched .skeleton-move { margin: 0; align-content: center; gap: 8px; }
+.skeleton-matched .skeleton-summary > div { gap: 8px; }
+.skeleton-matched .skeleton-summary > div:first-child { gap: 7px; }
+.skeleton-matched .skeleton-meter-slot,
+.skeleton-matched .skeleton-rolls-slot,
+.skeleton-matched .skeleton-target-slot { display: flex; align-items: center; }
+.skeleton-matched .skeleton-meter,
+.skeleton-matched .skeleton-rolls,
+.skeleton-matched .skeleton-target { margin: 0; }
+.skeleton-matched .skeleton-stats { margin: 0; gap: 0; }
+.skeleton-matched .skeleton-stat { gap: 3px; align-content: start; }
+.skeleton-matched .skeleton-stat > span:first-child { font-size: 11px; }
+.skeleton-matched .skeleton-value { margin-top: 4px; }
+.skeleton-matched .skeleton-table { padding: 0; border: 0; mask-image: none; }
+.skeleton-matched .skeleton-table h2 { margin: 0; }
+.skeleton-matched .skeleton-table-body { overflow: hidden; }
+.skeleton-matched .skeleton-row { grid-template-columns: var(--skeleton-columns); gap: 0; }
+.skeleton-matched .skeleton-row > .skeleton-bar { margin-left: 5px; max-width: calc(100% - 10px); }
+.skeleton-matched .skeleton-row > .skeleton-action { display: block; }
+.results-skeleton [hidden] { display: none !important; }
 @keyframes skeleton-pulse { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
 .results-skeleton .skeleton-bar { animation: skeleton-pulse 2.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .results-skeleton .skeleton-bar { animation: none; opacity: 1; } }

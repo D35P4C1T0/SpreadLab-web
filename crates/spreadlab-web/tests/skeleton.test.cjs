@@ -501,3 +501,45 @@ test('large result limits preserve the summary on desktop and mobile', async () 
     await page.close();
   }
 });
+
+test('structural skeleton stays separated and preserves section boundaries', async () => {
+  for (const width of [1440, 390]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await openWithResults(page);
+    await page.locator('[name="limit"]').fill('21');
+    const layout = await page.evaluate(() => {
+      const panel = document.querySelector('.results-panel');
+      const skeleton = panel.querySelector('[data-results-skeleton]');
+      const bars = [...skeleton.querySelectorAll('.skeleton-bar')].map(node => node.getBoundingClientRect());
+      const overlaps = bars.some((a, index) => bars.slice(index + 1).some(b =>
+        Math.min(a.right, b.right) > Math.max(a.left, b.left) &&
+        Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top)));
+      return {
+        overlaps,
+        aligned: [
+          ['.damage-card', '.skeleton-damage'],
+          ['.damage-grid', '.skeleton-summary'],
+          ['.meter', '.skeleton-meter-slot'],
+          ['.best-card', '.skeleton-best'],
+          ['.final-stats', '.skeleton-stats'],
+          ['.table-card', '.skeleton-table'],
+          ['.table-scroll', '.skeleton-table-body'],
+        ].every(([source, target]) => {
+          const actual = panel.querySelector(source).getBoundingClientRect();
+          const placeholder = skeleton.querySelector(target).getBoundingClientRect();
+          return ['top', 'left', 'width', 'height'].every(key => Math.abs(actual[key] - placeholder[key]) < 1);
+        }),
+        sections: skeleton.querySelectorAll('.skeleton-head, .skeleton-damage, .skeleton-best, .skeleton-table').length,
+        absoluteBars: [...skeleton.querySelectorAll('.skeleton-bar')].some(node => getComputedStyle(node).position === 'absolute'),
+        statsVisible: [...skeleton.querySelectorAll('.skeleton-value')].every(node => node.getBoundingClientRect().bottom <= panel.getBoundingClientRect().bottom),
+      };
+    });
+    assert.equal(layout.overlaps, false);
+    assert.equal(layout.aligned, true, `structural slots align at ${width}px`);
+    assert.equal(layout.absoluteBars, false);
+    assert.equal(layout.sections, 4);
+    assert.equal(layout.statsVisible, true);
+    await page.locator('.results-panel').screenshot({ path: `/tmp/spreadlab-structural-skeleton-${width}.png` });
+    await page.close();
+  }
+});
