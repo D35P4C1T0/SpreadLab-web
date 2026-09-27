@@ -1,4 +1,4 @@
-use crate::damage_bridge::{build_pokemon, calculate_benchmark, DamageBenchmark};
+use crate::damage_bridge::{build_pokemon, evaluate_input, prepare_benchmark, DamageBenchmark};
 use crate::data::{parse_item, ChampionsData};
 use crate::showdown::build_champions_sp_line;
 use crate::spreads::{generate_spreads, SpreadSearch};
@@ -319,6 +319,7 @@ pub fn offensive_ko_search(
     benchmark.attacker.stat_points.validate()?;
     let mut matches = Vec::new();
     let mut misses = Vec::new();
+    let prepared = prepare_benchmark(data, benchmark)?;
 
     for nature in &natures {
         for points in 0..=32 {
@@ -335,11 +336,11 @@ pub fn offensive_ko_search(
             if sps.total() > crate::stats::MAX_TOTAL_STAT_POINTS {
                 continue;
             }
-            let mut candidate = benchmark.clone();
+            let mut candidate = prepared.clone();
             candidate.attacker.nature = *nature;
-            candidate.attacker.stat_points = sps;
+            candidate.attacker.stat_points = sps.into();
 
-            let mut result = calculate_benchmark(data, &candidate)?;
+            let mut result = evaluate_input(candidate)?;
             let ko_chance = crate::survival::ko_probability(&result)?;
             result.ko_chance = Some(ko_chance);
             let spread = KoSpread {
@@ -519,6 +520,10 @@ fn optimize(
         }
     }
     let mut ranked = Vec::new();
+    let prepared = benchmarks
+        .iter()
+        .map(|benchmark| prepare_benchmark(data, benchmark))
+        .collect::<Result<Vec<_>, _>>()?;
 
     for sps in generate_spreads(search) {
         let mut summaries = Vec::with_capacity(benchmarks.len());
@@ -540,18 +545,18 @@ fn optimize(
             }
         };
 
-        for benchmark in benchmarks {
+        for benchmark in &prepared {
             let mut candidate = benchmark.clone();
             match mode {
                 OptimizationMode::Defensive => {
-                    candidate.defender.stat_points = sps;
+                    candidate.defender.stat_points = sps.into();
                 }
                 OptimizationMode::Offensive => {
-                    candidate.attacker.stat_points = sps;
+                    candidate.attacker.stat_points = sps.into();
                 }
             }
 
-            let result = calculate_benchmark(data, &candidate)?;
+            let result = evaluate_input(candidate)?;
             score += score_result(mode, &result)?;
             summaries.push(DamageSummary::from(result));
         }
@@ -623,6 +628,7 @@ pub(crate) fn sequence_damage_summary(
     max_hp: u16,
     starting_hp: u16,
     end_turn_after: &[bool],
+    damage: &mut [crate::search_damage::SearchDamage],
 ) -> Result<CombinedDamageSummary, OptimizeError> {
     let defender_item = benchmarks
         .first()
@@ -649,12 +655,7 @@ pub(crate) fn sequence_damage_summary(
     for (index, benchmark) in benchmarks.iter().enumerate() {
         let mut next = std::collections::BTreeMap::new();
         for (state, mass) in states {
-            let mut candidate = benchmark.clone();
-            candidate.defender.nature = nature;
-            candidate.defender.stat_points = sps;
-            candidate.defender.item = Some(format!("{:?}", state.item));
-            candidate.defender_current_hp = Some(state.hp);
-            let result = calculate_benchmark(data, &candidate)?;
+            let result = damage[index].calculate(nature, sps, state.hp, state.item)?;
             if !matches!(
                 result.outcome,
                 damage_calc::DamageOutcome::Damage

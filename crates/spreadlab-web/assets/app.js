@@ -139,7 +139,8 @@ const setdexStatLabels = Object.freeze({ hp: "HP", at: "Atk", df: "Def", sa: "Sp
 function setdexPresetText(pokemon, set) {
   const item = set.item && normalizeName(set.item) !== "none" ? ` @ ${set.item}` : "";
   const lines = [`${pokemon}${item}`];
-  if (set.ability) lines.push(`Ability: ${set.ability}`);
+  const ability = set.ability || primaryAbility(pokemon);
+  if (ability) lines.push(`Ability: ${ability}`);
   const points = Object.entries(set.sps || {})
     .filter(([key, value]) => setdexStatLabels[key] && Number(value) > 0)
     .map(([key, value]) => `${Number(value)} ${setdexStatLabels[key]}`);
@@ -171,10 +172,23 @@ function loadSetdexPresets() {
         id: `gen10:${normalizeName(pokemon)}:${normalizeName(setName)}`,
         name: setName,
         pokemon: canonical,
-        text: setdexPresetText(canonical, set),
+        text: setdexPresetText(canonical, { ...set, ability: set.ability || primaryAbility(pokemon) }),
       };
     }),
   );
+}
+
+function loadCommonPresets() {
+  if (typeof COMMON_SETS !== "object" || !Array.isArray(COMMON_SETS.sets)) return [];
+  return COMMON_SETS.sets.map(set => {
+    const pokemon = canonicalSpeciesName(set.pokemon);
+    return {
+      id: `common:${COMMON_SETS.regulation}:${normalizeName(set.pokemon)}`,
+      name: `#${set.rank} · ${set.usage.toFixed(2)}% usage · ${COMMON_SETS.regulation} ${COMMON_SETS.month}`,
+      pokemon,
+      text: setdexPresetText(pokemon, set),
+    };
+  });
 }
 
 function parseSet(text) {
@@ -467,6 +481,8 @@ function defaultSpeciesForBase(base) {
 function canonicalSpeciesName(name) {
   const exact = speciesList.find((species) => normalizeName(species) === normalizeName(name));
   if (exact) return exact;
+  const mega = speciesList.find(species => megaPokemonNameVariants(species).some(variant => normalizeName(variant) === normalizeName(name)));
+  if (mega) return mega;
   const aliases = {
     floetteeternal: "Floette (Eternal Flower)", aegislashshield: "Aegislash (Shield Forme)", aegislashblade: "Aegislash (Blade Forme)",
     meowsticf: "Meowstic (Female)", basculegionf: "Basculegion (Female)", mausholdfour: "Maushold (Family of Four)", palafinhero: "Palafin (Hero Form)",
@@ -751,7 +767,7 @@ function initSetLibraries() {
       return { id: `builtin:${normalizeName(pokemon)}`, name: `${pokemon} · Common`, pokemon, text };
     })
     .filter((entry, index, all) => entry.pokemon && all.findIndex((candidate) => candidate.id === entry.id) === index);
-  builtInSets = [...loadSetdexPresets(), ...initialSets].filter(
+  builtInSets = [...loadSetdexPresets(), ...loadCommonPresets(), ...initialSets].filter(
     (entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index,
   );
   savedSets = loadSavedSets();
@@ -2063,14 +2079,25 @@ function initAppShell() {
       content.innerHTML = `<div class="guide-copy"><h3>Build a matchup</h3><p>Choose Pokémon or a preset from each selector. Paste / edit set accepts Showdown text. Pick an attacking move and set its critical-hit toggle when needed.</p><h3>Find a spread</h3><p>Defensive mode minimizes investment while staying below your KO chance limit. Offensive mode finds the investment needed to reach your minimum KO chance. Nature “Any” lets the optimizer choose. Ranked rows stay advisory until you hover, focus, or tap a row and choose Apply spread, which copies that row's SPs and nature onto the matching set.</p><h3>Read the result</h3><p>Damage shows the HP range for the selected matchup. For 2HKO or 3HKO targets, the summary evaluates the combined sequence. Expand damage rolls to inspect individual rolls. The SPs under each set show its current investment, so results never overwrite the set on their own.</p><h3>Battle state</h3><p>Active abilities can set terrain, weather, and boosts. Review conditions after changing Pokémon. All changes recalculate automatically.</p></div>`;
     } else {
       title.textContent = kind === "saved" ? "Saved sets" : "Metagame presets";
-      const sets = kind === "saved" ? savedSets : builtInSets;
-      content.innerHTML = `<p class="dialog-hint">${kind === "saved" ? "Your sets saved on this device." : "Bundled competitive presets; not live usage rankings."}</p><div class="library-filters"><label>Search<input data-library-search type="search" placeholder="Pokémon or set name"/></label><label>Load into<select data-library-side><option value="attacker">Attacker</option><option value="defender">Defender</option></select></label></div><div class="library-list" data-library-list></div>`;
+      const allSets = kind === "saved" ? savedSets : builtInSets;
+      const hasCommon = allSets.some(set => set.id.startsWith("common:"));
+      let sets = allSets;
+      const snapshot = typeof COMMON_SETS === "object" ? COMMON_SETS : null;
+      content.innerHTML = `<p class="dialog-hint" data-library-hint></p><div class="library-filters">${hasCommon ? '<label>Show<select data-library-source><option value="current">Regulation MC presets</option><option value="common">Historical MB usage · Aug 2026</option><option value="all">All presets</option></select></label>' : ''}<label>Search<input data-library-search type="search" placeholder="Pokémon or set name"/></label><label>Load into<select data-library-side><option value="attacker">Attacker</option><option value="defender">Defender</option></select></label></div><div class="library-list" data-library-list></div>`;
       const render = () => {
+        const source = content.querySelector("[data-library-source]")?.value;
+        sets = source === "common" ? allSets.filter(set => set.id.startsWith("common:"))
+          : source === "current" ? allSets.filter(set => set.id.startsWith("gen10:")) : allSets;
+        content.querySelector("[data-library-hint]").textContent = kind === "saved" ? "Your sets saved on this device."
+          : source === "common" ? `Historical Smogon ${snapshot.month} · Regulation ${snapshot.regulation} · ${snapshot.rating} rating · BO3. These rankings predate MC additions.`
+          : source === "current" ? "Regulation MC competitive presets · September 12, 2026 update. Includes Rillaboom, Indeedee, and new Mega forms. Curated builds, not usage rankings."
+          : "Current MC presets and historical MB usage samples. Each usage sample identifies its original regulation and month.";
         const query = normalizeName(content.querySelector("[data-library-search]").value);
         const matches = sets.filter(set => normalizeName(`${set.pokemon} ${set.name}`).includes(query));
         content.querySelector("[data-library-list]").innerHTML = matches.length ? matches.map(set => `<button type="button" data-library-set="${escapeAttr(set.id)}"><b>${escapeHtml(set.pokemon)}</b><span>${escapeHtml(set.name)}</span></button>`).join("") : `<p class="dialog-hint">${kind === "saved" && !sets.length ? "No saved sets yet. Use Save set below either Pokémon." : "No matching sets."}</p>`;
       };
       content.querySelector("[data-library-search]").addEventListener("input", render);
+      content.querySelector("[data-library-source]")?.addEventListener("change", render);
       content.querySelector("[data-library-list]").addEventListener("click", event => {
         const button = event.target.closest("[data-library-set]");
         const set = sets.find(set => set.id === button?.dataset.librarySet);
