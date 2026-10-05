@@ -1,8 +1,9 @@
 mod ui;
 
 use axum::{
-    extract::{Form, Path, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    extract::{Form, Path, Request, State},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -20,7 +21,7 @@ use std::{
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
 #[cfg(debug_assertions)]
 use tower_livereload::{LiveReloadLayer, Reloader};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -189,6 +190,7 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .route("/api/species-abilities", get(api_species_abilities))
         .route("/api/unsupported-items", get(api_unsupported_items))
         .nest_service("/assets", assets)
+        .layer(middleware::from_fn(cache_policy))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -200,6 +202,8 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         app.layer(live_reload)
     };
 
+    // Outside live reload so debug HTML is compressed after script injection.
+    let app = app.layer(CompressionLayer::new());
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("serving SpreadLab WebUI at http://{addr}");
@@ -207,6 +211,47 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown_signal()?)
         .await?;
     Ok(())
+}
+
+async fn cache_policy(request: Request, next: Next) -> Response {
+    let readable = matches!(*request.method(), Method::GET | Method::HEAD);
+    let path = request.uri().path().to_owned();
+    let versioned = request.uri().query().is_some_and(|query| {
+        query
+            .split('&')
+            .any(|part| part.starts_with("v=") && part.len() > 2)
+    });
+    let mut response = next.run(request).await;
+    let cacheable_status =
+        response.status().is_success() || response.status() == StatusCode::NOT_MODIFIED;
+    let policy = if !readable || !cacheable_status {
+        Some("no-store")
+    } else if response.headers().contains_key(header::CACHE_CONTROL) {
+        None // Sprite handlers already set a seven-day cache lifetime.
+    } else if cfg!(debug_assertions) {
+        Some("no-cache")
+    } else if path.starts_with("/assets/") {
+        Some(if versioned {
+            "public, max-age=31536000, immutable"
+        } else {
+            "public, max-age=86400"
+        })
+    } else if path.starts_with("/api/") {
+        Some("public, max-age=300")
+    } else if matches!(
+        path.as_str(),
+        "/" | "/damage" | "/survive" | "/sequence" | "/ko" | "/optimize"
+    ) {
+        Some("public, max-age=60")
+    } else {
+        Some("no-store")
+    };
+    if let Some(policy) = policy {
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static(policy));
+    }
+    response
 }
 
 // Register SIGTERM before serving so deployment restarts drain active requests.

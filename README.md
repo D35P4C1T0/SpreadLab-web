@@ -94,6 +94,21 @@ cargo run --release -p spreadlab-web -- serve --host 127.0.0.1 --port 3000
 
 Release builds do not include or run live-reload middleware.
 
+The shell binds controls without waiting for metadata; catalogs fill in as their
+data arrives. Four core metadata resources preload from the document head, and
+preset scripts defer in dependency order. Mode tabs prefetch their destination
+after 120 ms of hover or focus. Pokémon, item, and set-library options warm the
+selected sprites on hover, focus, or keyboard highlight. Speculation skips touch
+hover, Save-Data, and connections reported as 3G or slower, with two active
+warmups, eight queued URLs, and a 64-URL budget per page. Calculations only run
+through the ordinary calculator workflow.
+
+Responses support gzip. Release builds cache versioned assets for one year,
+unversioned assets for one day, metadata for five minutes, and page HTML for one
+minute. Sprite responses retain their seven-day cache. Debug assets and metadata
+revalidate on use; calculation responses and errors use `no-store`. Bump the
+asset's `v` query in `src/ui.rs` whenever changing a versioned asset.
+
 ## Deployment checks
 
 `GET /healthz` returns an empty HTTP 204 after application data has loaded. It

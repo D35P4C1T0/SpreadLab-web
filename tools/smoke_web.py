@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check real HTTP behavior, or launch a server and also verify PORT/shutdown."""
 import argparse
+import gzip
 import json
 import os
 from pathlib import Path
@@ -67,9 +68,38 @@ def check(base):
         request(base, '/api/damage', {'attacker_set': 'not a valid request'})
     except urllib.error.HTTPError as error:
         assert 400 <= error.code < 500, error.code
+        assert error.headers.get('Cache-Control') == 'no-store'
     else:
         raise AssertionError('invalid request was accepted')
     print('PASS: health, six pages, exact assets, metadata, damage rolls, survival ranking, invalid input')
+    check_loading(base)
+
+
+def check_loading(base):
+    with HTTP.open(base + '/damage', timeout=10) as response:
+        development = response.headers.get('Cache-Control') == 'no-cache'
+        assert response.headers.get('Cache-Control') == (
+            'no-cache' if development else 'public, max-age=60')
+        html = response.read()
+        assert html.count(b'rel="preload"') == 4
+    policies = {
+        '/assets/app.js?v=20261005-1': 'public, max-age=31536000, immutable',
+        '/assets/type-icons/fire.svg': 'public, max-age=86400',
+        '/api/meta': 'public, max-age=300',
+    }
+    for route, expected in policies.items():
+        with HTTP.open(base + route, timeout=10) as response:
+            assert response.headers.get('Cache-Control') == ('no-cache' if development else expected), route
+    req = urllib.request.Request(base + '/assets/app.js?v=20261005-1',
+                                 headers={'Accept-Encoding': 'gzip'})
+    with HTTP.open(req, timeout=10) as response:
+        assert response.headers.get('Content-Encoding') == 'gzip'
+        assert 'accept-encoding' in response.headers.get('Vary', '').lower()
+        compressed = response.read()
+        original = (ROOT / 'crates/spreadlab-web/assets/app.js').read_bytes()
+        assert gzip.decompress(compressed) == original
+        assert len(compressed) < len(original)
+    print(f'PASS: preload hints, cache policies, gzip ({len(original)} to {len(compressed)} bytes)')
 
 
 def unused_port():

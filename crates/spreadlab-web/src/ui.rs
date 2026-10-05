@@ -141,9 +141,13 @@ fn render_shell(title: &str, body: String) -> String {
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
         <link rel="stylesheet" href="/assets/app.css?v=20260927-1"/>
-        <script src="/assets/setdex_ncp-g10.js?v=1369b359"></script>
-        <script src="/assets/common-sets.js?v=202608-mb"></script>
-        <script defer src="/assets/app.js?v=20260927-1"></script>
+        <link rel="preload" href="/api/pokemon-list" r#as="fetch" crossorigin="anonymous"/>
+        <link rel="preload" href="/api/species-abilities" r#as="fetch" crossorigin="anonymous"/>
+        <link rel="preload" href="/api/species-types" r#as="fetch" crossorigin="anonymous"/>
+        <link rel="preload" href="/api/move-types" r#as="fetch" crossorigin="anonymous"/>
+        <script defer src="/assets/setdex_ncp-g10.js?v=1369b359"></script>
+        <script defer src="/assets/common-sets.js?v=202608-mb"></script>
+        <script defer src="/assets/app.js?v=20261005-1"></script>
             </head>
             <body inner_html=body></body>
         </html>

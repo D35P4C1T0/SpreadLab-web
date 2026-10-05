@@ -760,7 +760,7 @@ function initRawEditors() {
   });
 }
 
-function initSetLibraries() {
+function refreshBuiltInSets() {
   const initialSets = [...document.querySelectorAll("[data-set-card] .raw-editor")]
     .map((editor) => {
       const text = editor.defaultValue.trim();
@@ -771,8 +771,12 @@ function initSetLibraries() {
   builtInSets = [...loadSetdexPresets(), ...loadCommonPresets(), ...initialSets].filter(
     (entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index,
   );
-  savedSets = loadSavedSets();
   rebuildSetIndexes();
+}
+
+function initSetLibraries() {
+  savedSets = loadSavedSets();
+  refreshBuiltInSets();
 
   document.querySelectorAll("[data-set-card]").forEach((card) => {
     refreshSetLibrary(card);
@@ -1150,6 +1154,7 @@ function setActivePokemonOption(options, index) {
     option.classList.toggle("is-active", optionIndex === index);
   });
   options[index]?.scrollIntoView({ block: "nearest" });
+  scheduleSpeculation(options[index]);
 }
 
 function fuzzyPokemonMatches(query, limit) {
@@ -2295,16 +2300,14 @@ function megaAlias(value) {
   return name.replace("-Mega-", " Mega ");
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+// Start metadata during deferred-script execution, before DOMContentLoaded.
+const catalogReady = Promise.all([loadPokemonList(), loadSpeciesAbilities()]);
+const typesReady = Promise.all([loadMoveTypes(), loadSpeciesTypes()]);
+const itemsReady = loadItemList();
+const movesReady = loadMoveList();
+
+document.addEventListener("DOMContentLoaded", () => {
   restoreState();
-  await Promise.all([
-    loadMoveTypes(),
-    loadSpeciesTypes(),
-    loadSpeciesAbilities(),
-    loadPokemonList(),
-    loadItemList(),
-    loadMoveList(),
-  ]);
   initShare();
   initRun();
   initApplyActions();
@@ -2325,9 +2328,155 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveState();
   initMoves();
   initSwap();
+  initSpeculativeLoading();
   document.querySelector(".workspace")?.addEventListener("input", syncStatPresentation);
   syncStatPresentation();
   autoRun();
+
+  // Catalogs hydrate their own controls; a slow move list cannot block the shell.
+  catalogReady.then(() => {
+    refreshBuiltInSets();
+    document.querySelectorAll("[data-pokemon-combobox]").forEach(combo => {
+      renderPokemonOptions(combo.querySelector("[data-pokemon-selector]"), combo.querySelector("[data-pokemon-options]"), true);
+    });
+    document.querySelectorAll(".raw-editor").forEach(syncRawEditor);
+  });
+  typesReady.then(() => {
+    document.querySelectorAll(".raw-editor").forEach(syncRawEditor);
+  });
+  itemsReady.then(() => {
+    document.querySelectorAll("[data-item-combobox]").forEach(combo => {
+      renderItemOptions(combo.querySelector("[data-item-selector]"), combo.querySelector("[data-item-options]"), true);
+    });
+  });
+  movesReady.then(renderMoveSelector);
 });
+
+const speculativeSelector = '.mode-tabs a[href], [data-pokemon-option], [data-item-option], [data-library-set]';
+const speculativeQueue = [];
+const speculativeUrls = new Set();
+let speculativeActive = 0;
+let speculativeTimer = null;
+let speculativeTarget = null;
+
+function canSpeculate() {
+  const connection = navigator.connection;
+  return !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType);
+}
+
+function queueSpeculativeUrl(url, documentRequest = false) {
+  if (!canSpeculate() || speculativeUrls.has(url) || speculativeQueue.length >= 8) return;
+  // Bound the per-page budget as well as simultaneous work.
+  if (speculativeUrls.size >= 64) return;
+  speculativeUrls.add(url);
+  speculativeQueue.push({ url, documentRequest });
+  drainSpeculativeQueue();
+}
+
+function drainSpeculativeQueue() {
+  while (speculativeActive < 2 && speculativeQueue.length && canSpeculate()) {
+    const { url, documentRequest } = speculativeQueue.shift();
+    speculativeActive++;
+    const resource = documentRequest ? document.createElement("link") : new Image();
+    let timeout;
+    let finished = false;
+    const finish = (failed = false) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      resource.onload = resource.onerror = null;
+      if (documentRequest) resource.remove();
+      if (failed) speculativeUrls.delete(url);
+      speculativeActive--;
+      drainSpeculativeQueue();
+    };
+    resource.onload = () => finish();
+    resource.onerror = () => finish(true);
+    if (documentRequest) {
+      resource.rel = "prefetch";
+      resource.as = "document";
+      resource.href = url;
+      document.head.append(resource);
+    } else {
+      resource.fetchPriority = "low";
+      resource.src = url;
+    }
+    // A browser can ignore a prefetch hint without firing an event.
+    if (documentRequest) timeout = setTimeout(() => finish(true), 15000);
+  }
+}
+
+function warmSetSprites(text) {
+  const parsed = parseSet(setToMegaFormFromItem(text));
+  queueSpeculativeUrl(`/api/sprite/${encodeURIComponent(parsed.name)}?v=static-1`);
+  queueSpeculativeUrl(`/api/item-sprite/${encodeURIComponent(parsed.item || "None")}`);
+}
+
+function speculateFor(target) {
+  if (!target?.isConnected || !canSpeculate()) return;
+  if (target.matches('.mode-tabs a[href]')) {
+    const url = new URL(target.href, location.href);
+    if (url.origin === location.origin && ["/survive", "/ko"].includes(url.pathname) && url.pathname !== location.pathname) {
+      queueSpeculativeUrl(url.href, true);
+    }
+    return;
+  }
+  if (target.hasAttribute("data-library-set")) {
+    const set = [...builtInSets, ...savedSets].find(entry => entry.id === target.dataset.librarySet);
+    if (set) warmSetSprites(set.text);
+    return;
+  }
+  const card = target.closest("[data-set-card]");
+  if (!card) return;
+  if (target.hasAttribute("data-item-option")) {
+    queueSpeculativeUrl(`/api/item-sprite/${encodeURIComponent(target.dataset.itemName)}`);
+    return;
+  }
+  const name = defaultSpeciesForBase(target.dataset.pokemonName);
+  const setId = target.dataset.setId;
+  const set = setId && setId !== "blank"
+    ? [...builtInSets, ...savedSets].find(entry => entry.id === setId)
+    : setId === "blank" ? null : setsForPokemon(name).builtIn[0] || setsForPokemon(target.dataset.pokemonName).builtIn[0];
+  let text = set?.text || buildBlankPokemonSet(card, name);
+  const stone = !set && setId !== "blank" && megaStoneForPokemon(name);
+  if (stone) text = setFirstLineItem(text, stone);
+  warmSetSprites(text);
+}
+
+function cancelSpeculation(target) {
+  if (target && target !== speculativeTarget) return;
+  clearTimeout(speculativeTimer);
+  speculativeTimer = null;
+  speculativeTarget = null;
+}
+
+function scheduleSpeculation(target) {
+  cancelSpeculation();
+  if (!target || !canSpeculate()) return;
+  speculativeTarget = target;
+  speculativeTimer = setTimeout(() => {
+    speculativeTimer = null;
+    speculateFor(target);
+  }, 120);
+}
+
+function initSpeculativeLoading() {
+  const targetFor = event => event.target.closest?.(speculativeSelector);
+  document.addEventListener("pointerover", event => {
+    if (event.pointerType === "touch") return;
+    const target = targetFor(event);
+    if (target && !target.contains(event.relatedTarget)) scheduleSpeculation(target);
+  });
+  document.addEventListener("pointerout", event => {
+    const target = targetFor(event);
+    if (target && !target.contains(event.relatedTarget)) cancelSpeculation(target);
+  });
+  document.addEventListener("focusin", event => scheduleSpeculation(targetFor(event)));
+  document.addEventListener("focusout", event => cancelSpeculation(targetFor(event)));
+  window.addEventListener("pagehide", () => {
+    cancelSpeculation();
+    speculativeQueue.length = 0;
+  });
+}
 
 window.addEventListener("pagehide", saveStateNow);
