@@ -16,13 +16,19 @@ pub enum ResultBlock {
 }
 
 pub fn render(mode: Mode, result: Option<ResultBlock>) -> String {
+    let middle = format!(
+        r#"<div class="middle-workspace">{field}<section id="results" class="results-panel" aria-label="Calculation results" aria-live="polite" aria-busy="false" tabindex="-1">{results}</section></div>"#,
+        field = field_panel(),
+        results = results_panel(mode, result.as_ref()),
+    );
     let body = format!(
         r##"{top}
 {sidebar}
 <form method="post" action="{action}" class="workspace">
   {hidden_sets}
-  <div class="left-workspace"><section class="calc-panel" aria-label="Spread optimization">{calc}</section><main class="sets-panel">{sets}</main></div>
-  <div class="right-workspace">{field}<section id="results" class="results-panel" aria-label="Calculation results" aria-live="polite" aria-busy="false" tabindex="-1">{results}</section></div>
+  <section class="calc-panel" aria-label="Spread optimization">{calc}</section>
+  <div class="section-title sets-title"><b>Matchup</b><button class="swap-action" type="button" aria-label="Swap attacker and defender"><span>⇄</span> Swap sides</button></div>
+  {sets}
   <a class="mobile-result-link" href="#results">View results <span data-mobile-result>Ready</span></a>
 </form>
 {early_restore}"##,
@@ -31,9 +37,7 @@ pub fn render(mode: Mode, result: Option<ResultBlock>) -> String {
         action = mode.action(),
         hidden_sets = hidden_sets(mode),
         calc = calculation_panel(mode),
-        sets = pokemon_sets(mode),
-        field = field_panel(),
-        results = results_panel(mode, result.as_ref()),
+        sets = pokemon_sets(mode, &middle),
         early_restore = early_restore_script(),
     );
     render_shell(mode.title(), body)
@@ -141,14 +145,14 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20261005-1"/>
+        <link rel="stylesheet" href="/assets/app.css?v=20261005-9"/>
         <link rel="preload" href="/api/pokemon-list" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/species-abilities" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/species-types" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/move-types" r#as="fetch" crossorigin="anonymous"/>
         <script defer src="/assets/setdex_ncp-g10.js?v=1369b359"></script>
         <script defer src="/assets/common-sets.js?v=202608-mb"></script>
-        <script defer src="/assets/app.js?v=20261005-2"></script>
+        <script defer src="/assets/app.js?v=20261005-5"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -217,12 +221,10 @@ fn calculation_panel(mode: Mode) -> String {
     )
 }
 
-fn pokemon_sets(mode: Mode) -> String {
+fn pokemon_sets(mode: Mode, middle: &str) -> String {
     let defender_label = "Defender";
     format!(
-        r#"<section class="panel sets">
-  <div class="section-title sets-title"><div><b>Matchup</b></div><button class="swap-action" type="button" aria-label="Swap attacker and defender"><span>⇄</span> Swap sides</button></div>
-  <div class="card-grid">
+        r#"<div class="matchup-grid">
     <article class="poke-card {attacker_optimized}" data-set-card="attacker">
       <div class="card-head"><div><b class="side-kicker"><span class="side-icon" aria-hidden="true">⚔</span> Attacker</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
 
@@ -235,8 +237,7 @@ fn pokemon_sets(mode: Mode) -> String {
 
         </div>
       </div>
-      <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Defiant</span><select data-ability-select="attacker" aria-label="attacker ability"><option>Defiant</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="attacker" aria-label="attacker ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Black Glasses" src="/api/item-sprite/Black%20Glasses" alt="Black Glasses"/><span data-field="item" class="sr-only">Black Glasses</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="attacker"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Attacker Item"><span class="select2-chosen" data-item-choice="attacker">Black Glasses</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="attacker"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="attacker" value="Black Glasses" autocomplete="off" role="combobox" aria-label="Search Attacker Item"/></span><span class="pokemon-options" data-item-options="attacker" role="listbox"></span></span></span></p></div></div>
-      <div class="condition-row"><label class="status">Status {status_attacker}</label><label class="nature">Nature {nature_attacker}</label></div>
+      <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Defiant</span><select data-ability-select="attacker" aria-label="attacker ability"><option>Defiant</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="attacker" aria-label="attacker ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Black Glasses" src="/api/item-sprite/Black%20Glasses" alt="Black Glasses"/><span data-field="item" class="sr-only">Black Glasses</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="attacker"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Attacker Item"><span class="select2-chosen" data-item-choice="attacker">Black Glasses</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="attacker"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="attacker" value="Black Glasses" autocomplete="off" role="combobox" aria-label="Search Attacker Item"/></span><span class="pokemon-options" data-item-options="attacker" role="listbox"></span></span></span></p></div><label class="status">Status {status_attacker}</label></div>
       <textarea class="raw-editor" aria-label="Attacker Showdown set" data-hidden-target="attacker_set">{attacker}</textarea>
       {attacker_sp_row}
       {attacker_boost_row}
@@ -249,6 +250,7 @@ fn pokemon_sets(mode: Mode) -> String {
       </div>
       <footer class="card-footer">{set_library}</footer>
     </article>
+    {middle}
     <article class="poke-card {defender_optimized}" data-set-card="defender">
       <div class="card-head"><div><b class="side-kicker"><svg class="side-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/></svg> {defender_label}</b></div><button class="raw-toggle" type="button" aria-expanded="false">Paste / edit set</button></div>
 
@@ -261,8 +263,7 @@ fn pokemon_sets(mode: Mode) -> String {
 
         </div>
       </div>
-      <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Fairy Aura</span><select data-ability-select="defender" aria-label="defender ability"><option>Fairy Aura</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="defender" aria-label="defender ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Floettite" src="/api/item-sprite/Floettite" alt="Floettite"/><span data-field="item" class="sr-only">Floettite</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="defender"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Defender Item"><span class="select2-chosen" data-item-choice="defender">Floettite</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="defender"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="defender" value="Floettite" autocomplete="off" role="combobox" aria-label="Search Defender Item"/></span><span class="pokemon-options" data-item-options="defender" role="listbox"></span></span></span></p></div></div>
-      <div class="condition-row"><label class="status">Status {status_defender}</label><label class="nature">Nature {nature_defender}</label></div>
+      <div class="loadout"><div class="ability-control"><label>Ability<span data-field="ability" class="sr-only">Fairy Aura</span><select data-ability-select="defender" aria-label="defender ability"><option>Fairy Aura</option></select></label><label class="ability-toggle"><input type="checkbox" data-ability-toggle="defender" aria-label="defender ability active" checked/>Active</label></div><div class="item-control"><small>Item</small><p class="item-line"><span class="item-label">Item:</span><img data-item-sprite="Floettite" src="/api/item-sprite/Floettite" alt="Floettite"/><span data-field="item" class="sr-only">Floettite</span><span class="pokemon-combobox item-combobox select2-container" data-item-combobox="defender"><button class="select2-choice item-choice" type="button" aria-expanded="false" aria-label="Defender Item"><span class="select2-chosen" data-item-choice="defender">Floettite</span><span class="select2-arrow"><b></b></span></button><span class="pokemon-menu select2-drop" data-item-menu="defender"><span class="select2-search"><input class="pokemon-selector item-selector" data-item-selector="defender" value="Floettite" autocomplete="off" role="combobox" aria-label="Search Defender Item"/></span><span class="pokemon-options" data-item-options="defender" role="listbox"></span></span></span></p></div><label class="status">Status {status_defender}</label></div>
       <textarea class="raw-editor" aria-label="Defender Showdown set" data-hidden-target="defender_set">{defender}</textarea>
       {defender_sp_row}
       {defender_boost_row}
@@ -270,12 +271,9 @@ fn pokemon_sets(mode: Mode) -> String {
       <div class="defender-note"><span aria-hidden="true">♢</span><span>No moves needed for defender</span><label>Current HP %<input name="hp_percent" type="number" value="100"/></label></div>
       <footer class="card-footer">{set_library}</footer>
     </article>
-  </div>
-</section>"#,
+  </div>"#,
         attacker = sample_attacker(),
         defender = sample_defender(),
-        nature_attacker = nature_select("card-nature", Some("Adamant")),
-        nature_defender = nature_select("card-nature defender-card-nature", Some("Timid")),
         status_attacker = status_select("attacker", Some("Healthy")),
         status_defender = status_select("defender", Some("Healthy")),
         attacker_optimized = if mode == Mode::Ko {
@@ -289,15 +287,21 @@ fn pokemon_sets(mode: Mode) -> String {
             "optimized-card"
         },
         attacker_sp_row = if mode == Mode::Ko {
-            optimized_sp_row()
+            optimized_sp_row(&nature_select("card-nature", Some("Adamant")))
         } else {
-            attacker_sp_row().to_owned()
+            attacker_sp_row(&nature_select("card-nature", Some("Adamant")))
         },
         attacker_boost_row = boost_stage_row("attacker"),
         defender_sp_row = if mode == Mode::Ko {
-            defender_sp_row().to_owned()
+            defender_sp_row(&nature_select(
+                "card-nature defender-card-nature",
+                Some("Timid"),
+            ))
         } else {
-            optimized_sp_row()
+            optimized_sp_row(&nature_select(
+                "card-nature defender-card-nature",
+                Some("Timid"),
+            ))
         },
         defender_boost_row = boost_stage_row("defender"),
         set_library = set_library_controls(),
@@ -378,10 +382,7 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         }
     };
     if let Some(summary) = value.get("summary") {
-        return result_shell(
-            &damage_card(summary, "Damage calculation", "PASS", value.get("rolls")),
-            "",
-        );
+        return result_shell(&damage_card(summary, value.get("rolls")), "");
     }
 
     let matches = if value.is_array() {
@@ -408,13 +409,11 @@ fn render_json_result(mode: Mode, json: &str) -> String {
     if let Some(result) = best.get("result").or_else(|| best.get("combined")) {
         html.push_str(&damage_card(
             result,
-            "Benchmark damage",
-            "PASS",
             best.get("rolls").or_else(|| result.get("rolls")),
         ));
     }
-    html.push_str(&best_spread_card(&best, mode));
     html.push_str(&matches_table(&matches));
+    html.push_str(&best_spread_card(&best, mode));
     result_shell(&html, "")
 }
 
@@ -442,8 +441,7 @@ fn best_spread_card(best: &Value, _mode: Mode) -> String {
     format!(
         r#"<article class="best-card" data-tab-panel="best" aria-label="Optimized spread">
   <div class="spread-summary"><b>{nature}</b><span>{sp_line}</span><small>{total} / 66 SP used</small></div>
-  {target_hp}
-  {stats}
+  <div class="target-stats">{target_hp}{stats}</div>
 </article>"#,
         target_hp = if _mode == Mode::Ko {
             String::new()
@@ -457,7 +455,7 @@ fn best_spread_card(best: &Value, _mode: Mode) -> String {
     )
 }
 
-fn damage_card(summary: &Value, title: &str, _status: &str, rolls: Option<&Value>) -> String {
+fn damage_card(summary: &Value, rolls: Option<&Value>) -> String {
     let min = num(summary, "min_damage");
     let max = num(summary, "max_damage");
     let pmin = summary
@@ -475,7 +473,6 @@ fn damage_card(summary: &Value, title: &str, _status: &str, rolls: Option<&Value
         .unwrap_or_else(|| "-".to_owned());
     format!(
         r#"<article class="damage-card" data-tab-panel="damage">
-  <div class="damage-title"><b>{title}</b></div>
   <div class="damage-grid">
     <div><small>Damage</small><b>{min}–{max} <span class="unit">HP</span></b><span>{pmin:.1}–{pmax:.1}%</span></div>
     <div><small>KO Chance</small><b>{ko}</b></div>
@@ -686,7 +683,13 @@ fn _boost_inputs(prefix: &str) -> String {
         .join("")
 }
 
-fn optimized_sp_row() -> String {
+fn sp_heading(label: &str, nature: &str) -> String {
+    format!(
+        r#"<div class="sp-heading"><div class="boost-hint sp-hint">{label}</div><label class="nature"><span>Nature</span>{nature}</label></div>"#
+    )
+}
+
+fn optimized_sp_row(nature: &str) -> String {
     let cells = [
         ("hp", "HP"),
         ("atk", "Atk"),
@@ -702,20 +705,27 @@ fn optimized_sp_row() -> String {
     .collect::<Vec<_>>()
     .join("");
     format!(
-        r#"<div class="optimized-sp-preview"><div class="boost-hint">Current SPs <span>Input</span></div><div class="preview-stats">{cells}</div></div>"#
+        r#"<div class="optimized-sp-preview">{heading}<div class="preview-stats">{cells}</div></div>"#,
+        heading = sp_heading("Current SPs <span>Input</span>", nature),
     )
 }
 
-fn attacker_sp_row() -> &'static str {
-    r#"<div class="boost-hint sp-hint">SPs</div>
+fn attacker_sp_row(nature: &str) -> String {
+    format!(
+        r#"{heading}
 <div class="statline sp-statline"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
-<div class="sp-row display-sps" data-sp-row="attacker"><input type="number" min="0" max="32" step="1" aria-label="HP stat points" data-sp-key="hp" value="0"/><input type="number" min="0" max="32" step="1" aria-label="Atk stat points" data-sp-key="atk" value="32"/><input type="number" min="0" max="32" step="1" aria-label="Def stat points" data-sp-key="def" value="0"/><input type="number" min="0" max="32" step="1" aria-label="SpA stat points" data-sp-key="spa" value="0"/><input type="number" min="0" max="32" step="1" aria-label="SpD stat points" data-sp-key="spd" value="0"/><input type="number" min="0" max="32" step="1" aria-label="Spe stat points" data-sp-key="spe" value="0"/></div>"#
+<div class="sp-row display-sps" data-sp-row="attacker"><input type="number" min="0" max="32" step="1" aria-label="HP stat points" data-sp-key="hp" value="0"/><input type="number" min="0" max="32" step="1" aria-label="Atk stat points" data-sp-key="atk" value="32"/><input type="number" min="0" max="32" step="1" aria-label="Def stat points" data-sp-key="def" value="0"/><input type="number" min="0" max="32" step="1" aria-label="SpA stat points" data-sp-key="spa" value="0"/><input type="number" min="0" max="32" step="1" aria-label="SpD stat points" data-sp-key="spd" value="0"/><input type="number" min="0" max="32" step="1" aria-label="Spe stat points" data-sp-key="spe" value="0"/></div>"#,
+        heading = sp_heading("SPs", nature)
+    )
 }
 
-fn defender_sp_row() -> &'static str {
-    r#"<div class="boost-hint sp-hint">SPs</div>
+fn defender_sp_row(nature: &str) -> String {
+    format!(
+        r#"{heading}
 <div class="statline sp-statline spread"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
-<div class="sp-row display-sps" data-sp-row="defender"><input name="lock_hp" type="number" min="0" max="32" step="1" aria-label="HP stat points" data-sp-key="hp" value="4"/><input name="lock_attack" type="number" min="0" max="32" step="1" aria-label="Atk stat points" data-sp-key="atk" value="0"/><input name="lock_defense" type="number" min="0" max="32" step="1" aria-label="Def stat points" data-sp-key="def" value="0"/><input name="lock_special_attack" type="number" min="0" max="32" step="1" aria-label="SpA stat points" data-sp-key="spa" value="0"/><input name="lock_special_defense" type="number" min="0" max="32" step="1" aria-label="SpD stat points" data-sp-key="spd" value="28"/><input name="lock_speed" type="number" min="0" max="32" step="1" aria-label="Spe stat points" data-sp-key="spe" value="0"/></div>"#
+<div class="sp-row display-sps" data-sp-row="defender"><input name="lock_hp" type="number" min="0" max="32" step="1" aria-label="HP stat points" data-sp-key="hp" value="4"/><input name="lock_attack" type="number" min="0" max="32" step="1" aria-label="Atk stat points" data-sp-key="atk" value="0"/><input name="lock_defense" type="number" min="0" max="32" step="1" aria-label="Def stat points" data-sp-key="def" value="0"/><input name="lock_special_attack" type="number" min="0" max="32" step="1" aria-label="SpA stat points" data-sp-key="spa" value="0"/><input name="lock_special_defense" type="number" min="0" max="32" step="1" aria-label="SpD stat points" data-sp-key="spd" value="28"/><input name="lock_speed" type="number" min="0" max="32" step="1" aria-label="Spe stat points" data-sp-key="spe" value="0"/></div>"#,
+        heading = sp_heading("SPs", nature)
+    )
 }
 
 fn nature_select(class: &str, selected: Option<&str>) -> String {

@@ -1673,21 +1673,20 @@ function resultSkeletonMarkup() {
   const bar = (classes = "") => `<span class="skeleton-bar ${classes}" aria-hidden="true"></span>`;
   const stats = ["HP", "Atk", "Def", "SpA", "SpD", "Spe"]
     .map((label) => `<div class="skeleton-stat"><span>${label}</span>${bar("skeleton-value")}</div>`).join("");
-  const rows = Array.from({ length: 6 }, () => `<div class="skeleton-row" aria-hidden="true">${bar("skeleton-rank")}${bar("skeleton-nature")}${bar("skeleton-spread")}${bar("skeleton-score")}${bar("skeleton-score")}${bar("skeleton-action")}</div>`).join("");
+  const rows = Array.from({ length: 6 }, () => `<div class="skeleton-row" aria-hidden="true">${bar("skeleton-rank")}${bar("skeleton-nature")}${bar("skeleton-spread")}${bar("skeleton-score")}${bar("skeleton-score")}</div>`).join("");
   return `<div class="results-skeleton" data-results-skeleton aria-hidden="true">
   <div class="skeleton-head"><b>Results</b><span class="skeleton-status"><i></i>Calculating…</span></div>
   <div class="skeleton-card skeleton-damage">
-    <div class="skeleton-move">${bar("skeleton-move-name")}${bar("skeleton-opponent")}</div>
     <div class="skeleton-summary"><div>${bar("skeleton-caption")}${bar("skeleton-figure")}${bar("skeleton-percent")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div><div>${bar("skeleton-caption")}${bar("skeleton-secondary")}</div></div>
     <div class="skeleton-meter-slot">${bar("skeleton-meter")}</div>
     <div class="skeleton-rolls-slot">${bar("skeleton-rolls")}</div>
   </div>
+  <div class="skeleton-table"><h2>All results</h2><div class="skeleton-table-body"><div class="skeleton-row skeleton-table-head" aria-hidden="true">${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}</div>${rows}</div></div>
   <div class="skeleton-card skeleton-best">
     <div class="skeleton-spread-summary">${bar("skeleton-nature")}${bar("skeleton-spread")}</div>
     ${location.pathname.includes("ko") ? "" : `<div class="skeleton-target-slot">${bar("skeleton-target")}</div>`}
     <div class="skeleton-stats">${stats}</div>
   </div>
-  <div class="skeleton-table"><h2>All results</h2><div class="skeleton-table-body"><div class="skeleton-row skeleton-table-head" aria-hidden="true">${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-caption")}${bar("skeleton-action")}</div>${rows}</div></div>
 </div>`;
 }
 
@@ -1718,7 +1717,7 @@ function alignResultSkeleton(panel) {
   ]) place(source, target);
   const damage = skeleton.querySelector(".skeleton-damage");
   for (const [source, target] of [
-    [".damage-title", ".skeleton-move"], [".damage-grid", ".skeleton-summary"],
+    [".damage-grid", ".skeleton-summary"],
     [".meter", ".skeleton-meter-slot"], [".damage-rolls summary", ".skeleton-rolls-slot"],
   ]) place(`.damage-card ${source}`, target, damage);
   const best = skeleton.querySelector(".skeleton-best");
@@ -2008,7 +2007,7 @@ function renderResults(data) {
   }
   const matches = Array.isArray(data) ? data : (data.matches || []);
   const best = data.best || matches[0] || null;
-  const body = best ? `${warningsCard(data.warnings)}${damageCard(best.result || best.combined || {}, best.rolls, true)}${bestCard(best)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
+  const body = best ? `${warningsCard(data.warnings)}${damageCard(best.result || best.combined || {}, best.rolls)}${matchesTable(matches)}${bestCard(best)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
   return resultShell(body);
 }
 
@@ -2028,18 +2027,16 @@ function spreadSummary(line) {
 
 function bestCard(best) {
   const stats = best.final_stats || {};
-  return `<article class="best-card" data-tab-panel="best" aria-label="Optimized spread"><div class="spread-summary"><b>${escapeHtml(best.nature || "–")}</b><span>${escapeHtml(spreadSummary(best.sp_line))}</span><small>${best.total_points ?? "–"} / 66 SP used</small></div>${location.pathname.includes("ko") ? "" : `<p class="target-hp">Target HP: <b>${stats.hp ?? "–"}</b></p>`}${finalStats(stats)}</article>`;
+  return `<article class="best-card" data-tab-panel="best" aria-label="Optimized spread"><div class="spread-summary"><b>${escapeHtml(best.nature || "–")}</b><span>${escapeHtml(spreadSummary(best.sp_line))}</span><small>${best.total_points ?? "–"} / 66 SP used</small></div><div class="target-stats">${location.pathname.includes("ko") ? "" : `<p class="target-hp">Target HP: <b>${stats.hp ?? "–"}</b></p>`}${finalStats(stats)}</div></article>`;
 }
 
-function damageCard(summary, rolls = summary.rolls || [], optimized = false) {
+function damageCard(summary, rolls = summary.rolls || []) {
   const pmax = Math.max(0, Math.min(100, Number(summary.percent_max || 0)));
   const pmin = Math.max(0, Math.min(100, Number(summary.percent_min || 0)));
-  const move = document.querySelector('[name="move_name"]')?.value || "Selected move";
-  const defender = parseSet(document.querySelector('[data-set-card="defender"] .raw-editor')?.value || "").name;
   const damageRolls = Array.isArray(rolls) && rolls.length
     ? `<details class="damage-rolls"><summary>${rolls.length} damage rolls</summary><code>${rolls.map((roll) => escapeHtml(roll)).join(", ")}</code></details>`
     : "";
-  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-title"><div><b>${escapeHtml(move)}</b> <span class="type-badge ${typeClass(moveType(move))}">${escapeHtml(moveType(move))}</span><small>vs. ${escapeHtml(defender)}</small></div>${optimized ? '<span class="result-status">Best spread</span>' : ""}</div><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
+  return `<article class="damage-card" data-tab-panel="damage"><div class="damage-grid"><div><small>Damage</small><b>${summary.min_damage ?? "–"}–${summary.max_damage ?? "–"} <span class="unit">HP</span></b><span>${fmt(summary.percent_min)}–${fmt(summary.percent_max)}%</span></div><div><small>KO chance</small><b>${percent(summary.ko_chance)}</b></div><div><small>Max damage</small><b>${summary.max_damage ?? "–"} HP</b></div></div><div class="meter" aria-hidden="true"><span style="width: ${pmax}%"></span><span class="damage-range" style="left: ${pmin}%; width: ${Math.max(0, pmax - pmin)}%"></span></div>${damageRolls}</article>`;
 }
 
 function rankedEntries(data) {
@@ -2058,9 +2055,9 @@ function matchesTable(matches) {
     const rank = entry.rank ?? index + 1;
     const nature = entry.nature || "–";
     const label = `Apply spread rank ${rank}: ${nature}, ${spreadSummary(entry.sp_line)}`;
-    return `<tr class="${index === 0 ? "best-row" : ""}"><td>${rank}${index === 0 ? '<span class="sr-only"> (best)</span>' : ''}</td><td>${escapeHtml(nature)}</td><td>${escapeHtml(spreadSummary(entry.sp_line))}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "–"}–${entry.result?.max_damage ?? entry.combined?.max_damage ?? "–"}</td><td class="apply-cell"><button type="button" class="apply-spread" data-apply-index="${index}" aria-label="${escapeAttr(label)}">Apply spread</button></td></tr>`;
+    return `<tr class="${index === 0 ? "best-row" : ""}"><td><button type="button" class="apply-spread" data-apply-index="${index}" aria-label="${escapeAttr(label)}" title="Apply spread">${rank}</button>${index === 0 ? '<span class="sr-only"> (best)</span>' : ''}</td><td>${escapeHtml(nature)}</td><td>${escapeHtml(spreadSummary(entry.sp_line))}</td><td>${percent(entry.result?.ko_chance ?? entry.combined?.ko_chance)}</td><td>${entry.result?.min_damage ?? entry.combined?.min_damage ?? "–"}–${entry.result?.max_damage ?? entry.combined?.max_damage ?? "–"}</td></tr>`;
   }).join("");
-  return `<article class="table-card" data-tab-panel="all"><h2>All results</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Ranked optimizer results"><table><thead><tr><th scope="col">Rank</th><th scope="col">Nature</th><th scope="col">SPs</th><th scope="col">KO chance</th><th scope="col">Damage</th><th scope="col"><span class="sr-only">Apply spread</span></th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
+  return `<article class="table-card" data-tab-panel="all"><h2>All results</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Ranked optimizer results"><table><thead><tr><th scope="col">Rank</th><th scope="col">Nature</th><th scope="col">SPs</th><th scope="col">KO chance</th><th scope="col">Damage</th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
 }
 
 function updateResultPresentation(data) {
@@ -2321,20 +2318,25 @@ function megaAlias(value) {
 }
 
 function initResultsSizing() {
-  const optimized = document.querySelector(".poke-card.optimized-card");
+  const cards = [...document.querySelectorAll(".poke-card")];
   const results = resultsPanel();
-  if (!optimized || !results || !window.ResizeObserver) return;
+  if (!cards.length || !results || !window.ResizeObserver) return;
   const update = () => {
-    if (!window.matchMedia("(min-width: 1200px)").matches) {
+    if (!window.matchMedia("(min-width: 1000px)").matches) {
       results.style.removeProperty("--results-height");
+      cards.forEach(card => card.style.removeProperty("min-height"));
       return;
     }
-    const available = optimized.getBoundingClientRect().bottom - results.getBoundingClientRect().top;
+    // Measure natural heights first so closing an editor can shrink both cards.
+    cards.forEach(card => { card.style.minHeight = "0px"; });
+    // Leave room for another couple of result rows without spreading controls apart.
+    const height = Math.max(...cards.map(card => card.getBoundingClientRect().height)) + 64;
+    cards.forEach(card => { card.style.minHeight = `${height}px`; });
+    const available = cards[0].getBoundingClientRect().bottom - results.getBoundingClientRect().top;
     results.style.setProperty("--results-height", `${Math.max(0, available)}px`);
   };
   const observer = new ResizeObserver(update);
-  observer.observe(optimized);
-  document.querySelectorAll(".calc-panel, .field").forEach(panel => observer.observe(panel));
+  document.querySelectorAll(".poke-card, .poke-card > *, .calc-panel, .field").forEach(panel => observer.observe(panel));
   window.addEventListener("resize", update);
   update();
 }

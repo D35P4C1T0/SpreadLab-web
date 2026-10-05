@@ -225,12 +225,16 @@ test('an applied spread is persisted across reload', async () => {
   await page.close();
 });
 
-test('apply rows stay visible on touch and hover reveals them without shifting layout', async () => {
+test('rank buttons apply spreads without an extra table column or layout shift', async () => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await openWithRows(page, '/survive', '/api/survive', ROWS);
   const row = page.locator('.table-card tbody tr').nth(1);
   const button = row.locator('[data-apply-index]');
 
+  assert.equal(await page.locator('.table-card th').count(), 5);
+  assert.equal(await row.locator('td').count(), 5);
+  assert.equal(await button.innerText(), '2');
+  assert.equal(await button.evaluate(node => getComputedStyle(node).opacity), '1');
   const before = await row.boundingBox();
   await row.hover();
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.table-card tbody tr:nth-child(2) .apply-spread')).opacity === '1');

@@ -78,7 +78,7 @@ test('MC presets expose Rillaboom with its competitive ability and spread', asyn
   await page.close();
 });
 
-for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768], [390, 844]]) {
+for (const [width, height] of [[2560, 1440], [1920, 1080], [1536, 960], [1440, 900], [1280, 800], [1024, 768], [998, 800], [760, 800], [390, 844]]) {
   test(`workspace geometry and real damage at ${width}×${height}`, async () => {
     const page = await browser.newPage({ viewport: { width, height } });
     page.setDefaultTimeout(10000);
@@ -90,24 +90,53 @@ for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768
     const attacker = await page.locator('[data-set-card="attacker"]').boundingBox();
     const defender = await page.locator('[data-set-card="defender"]').boundingBox();
     const results = await page.locator('.results-panel').boundingBox();
-    if (width >= 1200) {
+    if (width >= 1000) {
       assert.equal(attacker.y, defender.y);
-      assert.ok(results.x > defender.x);
+      assert.ok(attacker.x < results.x && results.x < defender.x);
+      assert.ok(results.width > attacker.width && results.width > defender.width);
       const optimization = await page.locator('.calc-panel').boundingBox();
       const field = await page.locator('.field').boundingBox();
       assert.ok(optimization.y < attacker.y);
+      assert.equal(field.y, attacker.y);
       assert.ok(field.y < results.y);
       assert.equal(field.x, results.x);
+      assert.ok(field.height < 200, 'battle controls stay compact');
+      assert.ok(optimization.height < 90, 'optimization stays a slim toolbar');
       assert.ok(Math.abs(results.y + results.height - defender.y - defender.height) < 2, 'Results ends at optimized card bottom');
+      assert.ok(Math.abs(attacker.height - defender.height) < 2, 'side cards share a height');
       assert.equal(await page.locator('.app-sidebar').isVisible(), true);
+      assert.ok((await page.locator('.workspace').boundingBox()).width <= 1440);
+      const footer = await page.locator('.best-card').boundingBox();
+      assert.ok(footer.y + footer.height <= results.y + results.height, 'spread footer stays visible');
+      assert.equal(await page.locator('.results-panel').evaluate(panel => panel.scrollHeight > panel.clientHeight), false, 'only table rows scroll');
     } else {
       assert.ok(results.y > defender.y + defender.height);
-      if (width >= 900) assert.equal(attacker.y, defender.y);
+      if (width >= 760) {
+        assert.equal(attacker.y, defender.y);
+        assert.ok(Math.abs(attacker.height - defender.height) < 2, 'tablet side cards share a height');
+      }
       else assert.ok(defender.y >= attacker.y + attacker.height);
+    }
+    for (const side of ['attacker', 'defender']) {
+      const card = page.locator(`[data-set-card="${side}"]`);
+      const ability = await card.locator('[data-ability-select]').boundingBox();
+      const item = await card.locator('.item-choice').boundingBox();
+      const status = await card.locator('[data-status-select]').boundingBox();
+      assert.equal(status.y, ability.y, 'status shares loadout row');
+      assert.equal(status.y, item.y);
+      assert.ok(status.x > item.x && item.x > ability.x);
+      const nature = await card.locator('[data-card-nature]').boundingBox();
+      const hint = await card.locator('.sp-hint').boundingBox();
+      assert.ok(nature.x > hint.x);
+      assert.ok(Math.abs(nature.y + nature.height / 2 - hint.y - hint.height / 2) < 2);
     }
     assert.match(await page.locator('.damage-grid').innerText(), /134–158/);
     assert.equal(await page.locator('.results-head').innerText(), 'Results');
-    assert.match(await page.locator('.damage-title').innerText(), /Iron Head[\s\S]*Floette-Mega/);
+    assert.equal(await page.locator('.damage-title').count(), 0);
+    const table = await page.locator('.table-card').boundingBox();
+    const best = await page.locator('.best-card').boundingBox();
+    assert.ok(table.y < best.y, 'ranked results precede spread details');
+    assert.ok((await page.locator('.target-hp').boundingBox()).height < 20);
     // The card display now shows the set's actual investment instead of the
     // optimizer's best spread, so the default Floette-Mega EVs survive untouched.
     assert.deepEqual(await page.locator('[data-preview-sp]').allTextContents(), ['26', '0', '13', '5', '0', '22']);

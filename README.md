@@ -257,12 +257,14 @@ crates.
 
 ## UI development and browser checks
 
-The responsive workspace uses the shared controls in `src/ui.rs`, the hand-written
+The workspace is capped at 1440px. Ranked table rows scroll within Results; the
+optimized spread stays visible as its footer. The responsive workspace uses
+the shared controls in `src/ui.rs`, the hand-written
 `assets/app.css` stylesheet, and presentation helpers in `assets/app.js` (paths
 relative to `crates/spreadlab-web`). Calculator requests and domain logic stay in
 the existing adapter. The six SP values shown under a set are its current
 investment, not the optimizer's answer; ranked rows stay advisory until you
-choose Apply spread, which copies that row's SPs and nature onto the matching
+click its rank button (Apply spread), which copies its SPs and nature onto the matching
 side.
 
 With the server running, install and run the browser checks using pnpm:
@@ -280,14 +282,16 @@ To use an existing Chromium installation, set `CHROMIUM_PATH=/usr/bin/chromium`.
 1280×800, 1024×768, and 390×844. Tests cover real damage, both optimizer modes,
 keyboard conditions, crit persistence, sets, forms, swapping, and failure states.
 
-The desktop app shell keeps Optimization above the matchup and Field Conditions
-above Results, with a compact left navigation rail. Saved Sets and Metagame open
+The desktop app shell uses three columns: Attacker, a wider center column for
+Field Conditions and Results, and Defender. Optimization is a compact toolbar
+above the matchup. The sidebar is 124px wide, collapses to a 44px icon rail below
+1800px, and becomes horizontal navigation below 760px. Saved Sets and Metagame open
 searchable local set libraries; Metagame defaults to Regulation MC competitive
 presets, including Rillaboom and Indeedee. The August MB usage snapshot remains
 available as an explicitly historical view. See
 [common-set refresh instructions](crates/spreadlab-web/README.md#common-sets).
 Guides explains the calculator, and Settings selects a persisted dark
-palette. Below 1200px the right workspace follows the matchup; below 900px the
+palette. Below 1000px the center column follows the paired sets; below 760px the
 order is Attacker, Defender, Battle Conditions, Optimization, Results.
 
 Sidebar SVG icons are from [Lucide](https://github.com/lucide-icons/lucide).
