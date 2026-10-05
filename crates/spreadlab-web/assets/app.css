@@ -352,7 +352,9 @@ tr.best-row td:first-child { color: var(--cyan); }
 .poke-card > * { width: 100%; }
 .loadout .status { grid-column: auto; min-width: 0; align-self: start; }
 .sp-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-block: 2px; }
-.sp-heading .boost-hint { display: flex; gap: 6px; margin: 0; white-space: nowrap; }
+.sp-heading .boost-hint { display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
+.sp-heading .clear-sps { flex: none; height: 26px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--muted); font-size: 10px; }
+.sp-heading .clear-sps:hover { background: #24424b; color: var(--text); }
 .sp-heading .nature { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 220px; }
 .sp-heading .nature select { flex: 1; height: 32px; }
 .side-kicker { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 15px; }

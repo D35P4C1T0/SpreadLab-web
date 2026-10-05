@@ -409,13 +409,16 @@ async function loadMoveList() {
 
 function renderMoveSelector() {
   const select = document.querySelector("[data-move-selector]");
-  if (!select || !moveList.length) return;
+  if (!select) return;
+  if (!select.options.length) select.add(new Option("Add a Move", ""));
+  select.options[0].value = "";
+  select.options[0].text = "Add a Move";
+  select.value = "";
+  select.disabled = false;
+  if (!moveList.length) return;
   const currentMoves = parseSet(document.querySelector('[data-set-card="attacker"] .raw-editor')?.value || "").moves;
   const available = moveList.filter((move) => !currentMoves.includes(move));
-  const full = currentMoves.length >= 4;
   // Keep unchanged options mounted: rebuilding the full catalog stalls card edits.
-  if (!select.options.length) select.add(new Option("", ""));
-  select.options[0].text = full ? "Four moves selected" : "Add a move…";
   const wanted = new Set(available);
   const existing = new Map([...select.options].slice(1).map(option => [option.value, option]));
   for (const [move, option] of existing) {
@@ -428,7 +431,6 @@ function renderMoveSelector() {
     previous = option;
   }
   select.value = "";
-  select.disabled = full;
 }
 
 function setPokemonList(data) {
@@ -591,12 +593,21 @@ function applyNatureClasses(card) {
   });
 }
 
+function syncAuroraVeilWeather(changedInput) {
+  const veil = document.querySelector('[name="defender_aurora_veil"]');
+  if (!veil) return;
+  if (changedInput === veil && veil.checked) setRadio("weather", "Snow");
+  syncToggleLabels();
+}
+
 function initToggles() {
+  syncAuroraVeilWeather();
   document.querySelectorAll("[data-toggle-group] label").forEach((label) => {
     const input = label.querySelector("input");
     const sync = () => label.classList.toggle("is-on", input.checked);
     sync();
     input.addEventListener("change", () => {
+      syncAuroraVeilWeather(input);
       delete input.dataset.auto;
       if (input.type === "radio") {
         document.querySelectorAll(`input[name="${input.name}"]`).forEach((peer) => {
@@ -610,6 +621,21 @@ function initToggles() {
 }
 
 function initSpBoxes() {
+  document.querySelectorAll("[data-clear-sps]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const card = button.closest("[data-set-card]");
+      const editor = card?.querySelector(".raw-editor");
+      if (!editor) return;
+      editor.value = replaceOrInsertLine(editor.value, /^(SPs|EVs):/i, fullSpsLine({}));
+      resetCardTraining(card);
+      delete card.dataset.activeSavedSet;
+      syncRawEditor(editor);
+      refreshSetLibrary(card);
+      saveState();
+      autoRun();
+    });
+  });
+
   document.querySelectorAll("[data-sp-key]").forEach((input) => {
     input.addEventListener("input", () => {
       input.value = Math.max(0, Math.min(32, Number(input.value || 0)));
@@ -932,7 +958,6 @@ function addMoveToAttackerSet(moveName) {
     renderMoveSelector();
     return;
   }
-  if (parsed.moves.length >= 4) return;
   editor.value = `${editor.value.trimEnd()}\n- ${moveName}`;
   delete card.dataset.activeSavedSet;
   const moveInput = document.querySelector('[name="move_name"]');
@@ -1407,7 +1432,7 @@ function fieldPayload() {
     gravity: checked("gravity"), fairy_aura: checked("fairy_aura"), protect: checked("protect"),
     helping_hand: checked("helping_hand"), attacker_tailwind: false,
     defender_tailwind: false, defender_reflect: checked("defender_reflect"),
-    defender_light_screen: checked("defender_light_screen"), defender_aurora_veil: checked("defender_aurora_veil"),
+    defender_light_screen: checked("defender_light_screen"), defender_aurora_veil: checked("defender_aurora_veil") && value("weather") === "Snow",
     defender_friend_guard: checked("defender_friend_guard"), attacker_boosts: boosts("attacker"), defender_boosts: boosts("defender"),
   };
 }

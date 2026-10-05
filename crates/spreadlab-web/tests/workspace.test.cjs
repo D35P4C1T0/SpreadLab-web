@@ -435,3 +435,91 @@ test('active terrain abilities update either side, toggles, and calculation payl
   assert.equal(await terrain(), 'Misty');
   await page.close();
 });
+
+for (const mode of ['survive', 'ko']) {
+  test(`clear defender SPs updates set, calculation and saved state in ${mode} mode`, async () => {
+    const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
+    await page.goto(`${baseURL}/${mode}`);
+    await page.waitForFunction(() => document.querySelector('.results-panel').getAttribute('aria-busy') === 'false');
+    const attacker = page.locator('[data-set-card="attacker"] .raw-editor');
+    const defender = page.locator('[data-set-card="defender"]');
+    const editor = defender.locator('.raw-editor');
+    const attackerBefore = await attacker.inputValue();
+    const defenderBefore = await editor.inputValue();
+    const response = page.waitForResponse(response => new URL(response.url()).pathname === `/api/${mode}` && response.request().method() === 'POST');
+    await defender.getByRole('button', { name: 'Clear defender SPs' }).click();
+    const calculation = await response;
+    assert.equal(calculation.status(), 200);
+    const zeroSps = 'SPs: 0 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe';
+    assert.ok(calculation.request().postDataJSON().defender_set.includes(zeroSps));
+    await page.waitForFunction(() => document.querySelector('.results-panel').getAttribute('aria-busy') === 'false');
+    const after = await editor.inputValue();
+    assert.ok(after.includes(zeroSps));
+    const withoutSps = text => text.split('\n').filter(line => !/^(SPs|EVs):/i.test(line)).join('\n');
+    assert.equal(withoutSps(after), withoutSps(defenderBefore));
+    assert.equal(await attacker.inputValue(), attackerBefore);
+    if (mode === 'survive') assert.deepEqual(await defender.locator('[data-preview-sp]').allTextContents(), ['0', '0', '0', '0', '0', '0']);
+    else assert.deepEqual(await defender.locator('[data-sp-key]').evaluateAll(inputs => inputs.map(input => input.value)), ['0', '0', '0', '0', '0', '0']);
+    await page.goto(`${baseURL}/${mode}`);
+    await page.waitForFunction(() => document.querySelector('.results-panel').getAttribute('aria-busy') === 'false');
+    assert.ok((await editor.inputValue()).includes(zeroSps), 'cleared investment persists after reload');
+    await page.close();
+  });
+}
+
+test('Aurora Veil enables visible Snow, remains checked in other weather and only reduces damage in Snow', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await ready(page, '/damage');
+  const veil = page.locator('[name="defender_aurora_veil"]');
+  const snow = page.locator('[name="weather"][value="Snow"]');
+  const baseline = Number(await page.locator('.damage-grid > div:first-child b').innerText().then(text => text.match(/–(\d+)/)[1]));
+  const enabled = await recalculate(page, () => veil.check(), '/api/damage');
+  assert.equal(await snow.isChecked(), true);
+  assert.equal(await snow.evaluate(input => input.closest('label').classList.contains('is-on')), true);
+  assert.equal(await page.evaluate(() => fieldPayload().defender_aurora_veil), true);
+  assert.ok(enabled.summary.max_damage < baseline, 'Veil reduces actual damage with Snow');
+  await ready(page, '/damage');
+  assert.equal(await veil.isChecked(), true);
+  assert.equal(await snow.isChecked(), true);
+  const disabled = await recalculate(page, () => page.locator('[name="weather"][value="Sun"]').check(), '/api/damage');
+  assert.equal(await veil.isChecked(), true);
+  assert.equal(await veil.evaluate(input => input.closest('label').classList.contains('is-on')), true);
+  assert.equal(disabled.summary.max_damage, baseline);
+  assert.equal(await page.evaluate(() => fieldPayload().defender_aurora_veil), false, 'payload excludes Veil without Snow');
+  await ready(page, '/damage');
+  assert.equal(await veil.isChecked(), true);
+  assert.equal(await page.locator('[name="weather"][value="Sun"]').isChecked(), true);
+  const reactivated = await recalculate(page, () => snow.check(), '/api/damage');
+  assert.equal(reactivated.summary.max_damage, enabled.summary.max_damage);
+  await page.close();
+});
+
+test('move picker keeps its prompt and adds, calculates, reloads and removes moves beyond four', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await ready(page, '/damage');
+  const selector = page.locator('[data-move-selector]');
+  await page.waitForFunction(() => document.querySelector('[data-move-selector] option[value="Flamethrower"]'));
+  const prompt = async () => {
+    assert.equal(await selector.isEnabled(), true);
+    assert.equal(await selector.inputValue(), '');
+    assert.equal(await selector.locator('option').first().innerText(), 'Add a Move');
+  };
+  await prompt();
+  for (const move of ['Flamethrower', 'Tackle']) {
+    const data = await recalculate(page, () => selector.selectOption(move), '/api/damage');
+    assert.ok(data.summary.max_damage > 0);
+    assert.equal(await page.locator('[name="move_name"]').inputValue(), move);
+    await prompt();
+  }
+  const moves = page.locator('[data-set-card="attacker"] .move');
+  assert.equal(await moves.count(), 6);
+  assert.equal(await selector.locator('option[value="Tackle"]').count(), 0, 'already added moves stay excluded');
+  await ready(page, '/damage');
+  assert.equal(await moves.count(), 6);
+  await prompt();
+  await recalculate(page, () => page.locator('[data-delete-move="Tackle"]').click(), '/api/damage');
+  assert.equal(await moves.count(), 5);
+  assert.equal(await selector.locator('option[value="Tackle"]').count(), 1);
+  await prompt();
+  await page.close();
+});

@@ -83,14 +83,14 @@ def check_loading(base):
         html = response.read()
         assert html.count(b'rel="preload"') == 4
     policies = {
-        '/assets/app.js?v=20261005-5': 'public, max-age=31536000, immutable',
+        '/assets/app.js?v=20261005-9': 'public, max-age=31536000, immutable',
         '/assets/type-icons/fire.svg': 'public, max-age=86400',
         '/api/meta': 'public, max-age=300',
     }
     for route, expected in policies.items():
         with HTTP.open(base + route, timeout=10) as response:
             assert response.headers.get('Cache-Control') == ('no-cache' if development else expected), route
-    req = urllib.request.Request(base + '/assets/app.js?v=20261005-5',
+    req = urllib.request.Request(base + '/assets/app.js?v=20261005-9',
                                  headers={'Accept-Encoding': 'gzip'})
     with HTTP.open(req, timeout=10) as response:
         assert response.headers.get('Content-Encoding') == 'gzip'

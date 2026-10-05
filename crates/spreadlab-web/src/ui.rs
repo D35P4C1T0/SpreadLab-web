@@ -145,14 +145,14 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20261005-9"/>
+        <link rel="stylesheet" href="/assets/app.css?v=20261005-11"/>
         <link rel="preload" href="/api/pokemon-list" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/species-abilities" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/species-types" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/move-types" r#as="fetch" crossorigin="anonymous"/>
         <script defer src="/assets/setdex_ncp-g10.js?v=1369b359"></script>
         <script defer src="/assets/common-sets.js?v=202608-mb"></script>
-        <script defer src="/assets/app.js?v=20261005-5"></script>
+        <script defer src="/assets/app.js?v=20261005-9"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -241,7 +241,7 @@ fn pokemon_sets(mode: Mode, middle: &str) -> String {
       <textarea class="raw-editor" aria-label="Attacker Showdown set" data-hidden-target="attacker_set">{attacker}</textarea>
       {attacker_sp_row}
       {attacker_boost_row}
-      <div class="move-picker"><label>Moves<select data-move-selector aria-label="Move selector"><option value="Iron Head">Iron Head</option></select></label></div>
+      <div class="move-picker"><label>Moves<select data-move-selector aria-label="Move selector"><option value="">Add a Move</option></select></label></div>
       <div class="moves" data-field="moves">
         <div class="move selected" data-move="Iron Head"><button class="move-select" type="button">Iron Head <span>Steel</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Iron Head"/>Crit</label><button class="move-delete" type="button" data-delete-move="Iron Head" aria-label="Delete Iron Head">&#128465;&#xfe0e;</button></div>
         <div class="move" data-move="Knock Off"><button class="move-select" type="button">Knock Off <span>Dark</span></button><label class="crit-toggle"><input type="checkbox" data-crit-move="Knock Off"/>Crit</label><button class="move-delete" type="button" data-delete-move="Knock Off" aria-label="Delete Knock Off">&#128465;&#xfe0e;</button></div>
@@ -287,7 +287,7 @@ fn pokemon_sets(mode: Mode, middle: &str) -> String {
             "optimized-card"
         },
         attacker_sp_row = if mode == Mode::Ko {
-            optimized_sp_row(&nature_select("card-nature", Some("Adamant")))
+            optimized_sp_row(&nature_select("card-nature", Some("Adamant")), false)
         } else {
             attacker_sp_row(&nature_select("card-nature", Some("Adamant")))
         },
@@ -298,10 +298,10 @@ fn pokemon_sets(mode: Mode, middle: &str) -> String {
                 Some("Timid"),
             ))
         } else {
-            optimized_sp_row(&nature_select(
-                "card-nature defender-card-nature",
-                Some("Timid"),
-            ))
+            optimized_sp_row(
+                &nature_select("card-nature defender-card-nature", Some("Timid")),
+                true,
+            )
         },
         defender_boost_row = boost_stage_row("defender"),
         set_library = set_library_controls(),
@@ -683,13 +683,18 @@ fn _boost_inputs(prefix: &str) -> String {
         .join("")
 }
 
-fn sp_heading(label: &str, nature: &str) -> String {
+fn sp_heading(label: &str, nature: &str, clear_defender: bool) -> String {
+    let clear = if clear_defender {
+        r#"<button type="button" class="clear-sps" data-clear-sps aria-label="Clear defender SPs" title="Clear defender SPs">Clear</button>"#
+    } else {
+        ""
+    };
     format!(
-        r#"<div class="sp-heading"><div class="boost-hint sp-hint">{label}</div><label class="nature"><span>Nature</span>{nature}</label></div>"#
+        r#"<div class="sp-heading"><div class="boost-hint sp-hint">{label}{clear}</div><label class="nature"><span>Nature</span>{nature}</label></div>"#
     )
 }
 
-fn optimized_sp_row(nature: &str) -> String {
+fn optimized_sp_row(nature: &str, clear_defender: bool) -> String {
     let cells = [
         ("hp", "HP"),
         ("atk", "Atk"),
@@ -706,7 +711,7 @@ fn optimized_sp_row(nature: &str) -> String {
     .join("");
     format!(
         r#"<div class="optimized-sp-preview">{heading}<div class="preview-stats">{cells}</div></div>"#,
-        heading = sp_heading("Current SPs <span>Input</span>", nature),
+        heading = sp_heading("Current SPs <span>Input</span>", nature, clear_defender),
     )
 }
 
@@ -715,7 +720,7 @@ fn attacker_sp_row(nature: &str) -> String {
         r#"{heading}
 <div class="statline sp-statline"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
 <div class="sp-row display-sps" data-sp-row="attacker"><input type="number" min="0" max="32" step="1" aria-label="HP stat points" data-sp-key="hp" value="0"/><input type="number" min="0" max="32" step="1" aria-label="Atk stat points" data-sp-key="atk" value="32"/><input type="number" min="0" max="32" step="1" aria-label="Def stat points" data-sp-key="def" value="0"/><input type="number" min="0" max="32" step="1" aria-label="SpA stat points" data-sp-key="spa" value="0"/><input type="number" min="0" max="32" step="1" aria-label="SpD stat points" data-sp-key="spd" value="0"/><input type="number" min="0" max="32" step="1" aria-label="Spe stat points" data-sp-key="spe" value="0"/></div>"#,
-        heading = sp_heading("SPs", nature)
+        heading = sp_heading("SPs", nature, false)
     )
 }
 
@@ -724,7 +729,7 @@ fn defender_sp_row(nature: &str) -> String {
         r#"{heading}
 <div class="statline sp-statline spread"><span>HP</span><span>Atk</span><span>Def</span><span>SpA</span><span>SpD</span><span>Spe</span></div>
 <div class="sp-row display-sps" data-sp-row="defender"><input name="lock_hp" type="number" min="0" max="32" step="1" aria-label="HP stat points" data-sp-key="hp" value="4"/><input name="lock_attack" type="number" min="0" max="32" step="1" aria-label="Atk stat points" data-sp-key="atk" value="0"/><input name="lock_defense" type="number" min="0" max="32" step="1" aria-label="Def stat points" data-sp-key="def" value="0"/><input name="lock_special_attack" type="number" min="0" max="32" step="1" aria-label="SpA stat points" data-sp-key="spa" value="0"/><input name="lock_special_defense" type="number" min="0" max="32" step="1" aria-label="SpD stat points" data-sp-key="spd" value="28"/><input name="lock_speed" type="number" min="0" max="32" step="1" aria-label="Spe stat points" data-sp-key="spe" value="0"/></div>"#,
-        heading = sp_heading("SPs", nature)
+        heading = sp_heading("SPs", nature, true)
     )
 }
 
