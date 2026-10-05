@@ -98,6 +98,7 @@ for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768
       assert.ok(optimization.y < attacker.y);
       assert.ok(field.y < results.y);
       assert.equal(field.x, results.x);
+      assert.ok(Math.abs(results.y + results.height - defender.y - defender.height) < 2, 'Results ends at optimized card bottom');
       assert.equal(await page.locator('.app-sidebar').isVisible(), true);
     } else {
       assert.ok(results.y > defender.y + defender.height);
@@ -105,6 +106,7 @@ for (const [width, height] of [[1536, 960], [1440, 900], [1280, 800], [1024, 768
       else assert.ok(defender.y >= attacker.y + attacker.height);
     }
     assert.match(await page.locator('.damage-grid').innerText(), /134–158/);
+    assert.equal(await page.locator('.results-head').innerText(), 'Results');
     assert.match(await page.locator('.damage-title').innerText(), /Iron Head[\s\S]*Floette-Mega/);
     // The card display now shows the set's actual investment instead of the
     // optimizer's best spread, so the default Floette-Mega EVs survive untouched.
@@ -194,7 +196,8 @@ test('viewer delegates ability effects and serializes the Active toggle', async 
   assert.deepEqual(guarded.rolls, unguarded.rolls.map(value => Math.floor(value / 2)));
   const payload = await page.evaluate(() => currentPayload().body);
   assert.match(payload.defender_set, /Ability: Aura Guard/);
-  assert.match(payload.defender_set, /Ability Enabled: false/);
+  assert.doesNotMatch(payload.defender_set, /Ability Enabled:/);
+  assert.equal(payload.defender_ability_enabled, false);
   await page.evaluate(() => {
     const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
     defender.value = 'Mega Meganium\nAbility: Mega Sol';

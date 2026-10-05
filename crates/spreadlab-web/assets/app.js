@@ -211,23 +211,19 @@ function parseSet(text) {
   return data;
 }
 
+function stripAbilityEnabled(text) {
+  return text.replace(/^\s*Ability Enabled:.*(?:\r?\n|$)/gim, "");
+}
+
 function normalizedSetText(text) {
-  return text
+  return stripAbilityEnabled(text)
     .replace(/^EVs:/gim, "SPs:")
     .replace(/^Floette-Mega\s*(?:@\s*Floettite)?\s*$/gim, "Mega Floette")
     .replace(/^(.+?)\s+@\s+Floettite\s*$/gim, "$1");
 }
 
-function setWithAbilityState(text, cardKey) {
-  const normalized = normalizedSetText(text);
-  const toggle = document.querySelector(`[data-set-card="${cardKey}"] [data-ability-toggle]`);
-  if (!toggle) return normalized;
-  return replaceOrInsertAfter(
-    normalized,
-    /^Ability Enabled:/i,
-    `Ability Enabled: ${toggle.checked ? "true" : "false"}`,
-    /^Ability:/i
-  );
+function abilityEnabled(cardKey) {
+  return document.querySelector(`[data-set-card="${cardKey}"] [data-ability-toggle]`)?.checked ?? true;
 }
 
 function setWithStatus(text, cardKey) {
@@ -295,8 +291,6 @@ function renderCard(card, parsed) {
   if (itemChoice) itemChoice.replaceChildren(document.createTextNode(parsed.item));
   renderTypes(card, parsed.name);
   card.querySelector('[data-field="ability"]')?.replaceChildren(document.createTextNode(parsed.ability));
-  const abilityToggle = card.querySelector("[data-ability-toggle]");
-  if (abilityToggle) abilityToggle.checked = parsed.abilityEnabled ?? true;
   syncAbilityTerrain(card, parsed);
   card.querySelector('[data-field="item"]')?.replaceChildren(document.createTextNode(parsed.item));
   const itemSprite = card.querySelector("[data-item-sprite]");
@@ -564,6 +558,12 @@ function syncMoveEffectField(moveName) {
 }
 
 function syncRawEditor(editor) {
+  const legacyEnabled = parseSet(editor.value).abilityEnabled;
+  if (legacyEnabled != null) {
+    setChecked(`[data-set-card="${editor.closest("[data-set-card]").dataset.setCard}"] [data-ability-toggle]`, legacyEnabled);
+  }
+  const cleanText = stripAbilityEnabled(editor.value);
+  if (cleanText !== editor.value) editor.value = cleanText;
   syncRawEditorValue(editor);
   const wasFocused = document.activeElement === editor;
   const selectionStart = editor.selectionStart;
@@ -650,7 +650,6 @@ function initAbilityToggles() {
       const card = toggle.closest("[data-set-card]");
       const editor = card?.querySelector(".raw-editor");
       if (!card || !editor) return;
-      editor.value = setWithAbilityState(editor.value, card.dataset.setCard);
       delete card.dataset.activeSavedSet;
       syncRawEditor(editor);
       refreshSetLibrary(card);
@@ -797,7 +796,8 @@ function initSetLibraries() {
 function loadSavedSets() {
   try {
     const parsed = JSON.parse(localStorage.getItem(savedSetsKey) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((entry) => entry?.id && entry?.name && entry?.pokemon && entry?.text) : [];
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry?.id && entry?.name && entry?.pokemon && entry?.text)
+      .map(entry => ({ ...entry, abilityEnabled: entry.abilityEnabled ?? parseSet(entry.text).abilityEnabled ?? true, text: stripAbilityEnabled(entry.text) })) : [];
   } catch (_) {
     return [];
   }
@@ -882,7 +882,7 @@ function saveCurrentSet(card) {
   }
   const pokemon = parseSet(editor.value).name;
   const id = `saved:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-  savedSets.push({ id, name, pokemon, text: editor.value });
+  savedSets.push({ id, name, pokemon, text: stripAbilityEnabled(editor.value), abilityEnabled: abilityEnabled(card.dataset.setCard) });
   persistSavedSets();
   card.dataset.activeSavedSet = id;
   closeSaveSetRow(card);
@@ -1218,6 +1218,7 @@ function applyPokemonSelection(cardKey, rawName, setId = "") {
   if (setId && setId !== "blank") {
     const preset = [...builtInSets, ...savedSets].find((entry) => entry.id === setId);
     if (preset) {
+      setChecked(`[data-set-card="${cardKey}"] [data-ability-toggle]`, preset.abilityEnabled ?? true);
       editor.value = setToMegaFormFromItem(preset.text);
       if (setId.startsWith("saved:")) card.dataset.activeSavedSet = setId;
       else delete card.dataset.activeSavedSet;
@@ -1232,6 +1233,7 @@ function applyPokemonSelection(cardKey, rawName, setId = "") {
     }
   }
   if (setId === "blank") {
+    setChecked(`[data-set-card="${cardKey}"] [data-ability-toggle]`, true);
     editor.value = buildBlankPokemonSet(card, selected);
     delete card.dataset.activeSavedSet;
     syncRawEditor(editor);
@@ -1241,6 +1243,7 @@ function applyPokemonSelection(cardKey, rawName, setId = "") {
     return;
   }
   if (normalizeName(previous) === normalizeName(selected)) return;
+  setChecked(`[data-set-card="${cardKey}"] [data-ability-toggle]`, true);
 
   resetCardTraining(card);
   resetCardBoosts(card);
@@ -1371,6 +1374,9 @@ function initSwap() {
     const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
     if (!attacker || !defender) return;
     [attacker.value, defender.value] = [defender.value, attacker.value];
+    const attackerToggle = attacker.closest("[data-set-card]").querySelector("[data-ability-toggle]");
+    const defenderToggle = defender.closest("[data-set-card]").querySelector("[data-ability-toggle]");
+    [attackerToggle.checked, defenderToggle.checked] = [defenderToggle.checked, attackerToggle.checked];
     delete attacker.closest("[data-set-card]")?.dataset.activeSavedSet;
     delete defender.closest("[data-set-card]")?.dataset.activeSavedSet;
     syncRawEditor(attacker);
@@ -1409,8 +1415,10 @@ function fieldPayload() {
 function currentPayload() {
   const hitGoal = Math.max(1, Math.min(3, number("hit_goal", 1)));
   const base = {
-    attacker_set: setWithStatus(setWithAbilityState(document.querySelector('[name="attacker_set"]')?.value || "", "attacker"), "attacker"),
-    defender_set: setWithStatus(setWithAbilityState(document.querySelector('[name="defender_set"]')?.value || "", "defender"), "defender"),
+    attacker_set: setWithStatus(normalizedSetText(document.querySelector('[name="attacker_set"]')?.value || ""), "attacker"),
+    defender_set: setWithStatus(normalizedSetText(document.querySelector('[name="defender_set"]')?.value || ""), "defender"),
+    attacker_ability_enabled: abilityEnabled("attacker"),
+    defender_ability_enabled: abilityEnabled("defender"),
     move_name: document.querySelector('[name="move_name"]')?.value || "",
     move_times_affected: moveEffectCount("move_times_affected"),
     critical: selectedCrit(),
@@ -1424,8 +1432,10 @@ function currentPayload() {
       path: "/api/survive-sequence",
       body: {
         defender_set: base.defender_set,
+        defender_ability_enabled: base.defender_ability_enabled,
         hits: Array.from({ length: hitGoal }, () => ({
           attacker_set: base.attacker_set,
+          attacker_ability_enabled: base.attacker_ability_enabled,
           move_name: base.move_name,
           move_times_affected: base.move_times_affected,
           critical: base.critical,
@@ -1483,8 +1493,8 @@ function cardTypes(cardKey) {
 function collectState() {
   const fieldInput = (selector) => document.querySelector(selector);
   return {
-    attacker: document.querySelector('[data-set-card="attacker"] .raw-editor')?.value || "",
-    defender: document.querySelector('[data-set-card="defender"] .raw-editor')?.value || "",
+    attacker: stripAbilityEnabled(document.querySelector('[data-set-card="attacker"] .raw-editor')?.value || ""),
+    defender: stripAbilityEnabled(document.querySelector('[data-set-card="defender"] .raw-editor')?.value || ""),
     attackerTypes: cardTypes("attacker"),
     defenderTypes: cardTypes("defender"),
     move: document.querySelector('[name="move_name"]')?.value || "",
@@ -1545,7 +1555,7 @@ function restoreState() {
     for (const key of ["attacker", "defender"]) {
       const editor = document.querySelector(`[data-set-card="${key}"] .raw-editor`);
       if (editor && typeof state[`${key}AbilityOn`] === "boolean") {
-        editor.value = setWithAbilityState(editor.value, key);
+        editor.value = stripAbilityEnabled(editor.value);
       }
     }
     setValue('[data-set-card="attacker"] [data-status-select]', state.attackerStatus);
@@ -1819,7 +1829,7 @@ function showWaitingResults() {
   invalidateApplyActions();
   const mobileResult = document.querySelector("[data-mobile-result]");
   if (mobileResult) mobileResult.textContent = "Waiting";
-  panel.innerHTML = `<div class="results-head"><b>Results</b><span>Waiting</span><p>Select a move</p></div><article class="best-card empty-state"><h2>Add a move</h2><p>Choose a move from the selector to calculate.</p></article>`;
+  panel.innerHTML = `<div class="results-head"><b>Results</b></div><article class="best-card empty-state"><h2>Add a move</h2><p>Choose a move from the selector to calculate.</p></article>`;
 }
 
 function startWorkflow() {
@@ -1856,7 +1866,7 @@ function startWorkflow() {
       if (mobileResult) mobileResult.textContent = "Calculation failed";
       invalidateApplyActions();
       panel.classList.remove("is-stale");
-      panel.innerHTML = `<div class="results-head"><b>Error</b><span>0 results</span></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
+      panel.innerHTML = `<div class="results-head"><b>Results</b></div><article class="best-card error-card"><h2>Run failed</h2><p>${escapeHtml(error.message)}</p></article>`;
     } finally {
       if (activeWorkflow === workflow) {
         activeWorkflow = null;
@@ -1955,7 +1965,7 @@ function bestDamagePayload(path, body, best) {
   } else if (path === "/api/survive-sequence") {
     const hit = body.hits?.[0];
     if (!hit) return null;
-    benchmark = { ...hit, defender_set: body.defender_set };
+    benchmark = { ...hit, defender_set: body.defender_set, defender_ability_enabled: body.defender_ability_enabled };
     optimizedSide = "defender_set";
   } else if (path === "/api/optimize/defensive") {
     benchmark = { ...(body.benchmarks?.[0] || {}) };
@@ -1968,6 +1978,8 @@ function bestDamagePayload(path, body, best) {
   return {
     attacker_set: benchmark.attacker_set,
     defender_set: benchmark.defender_set,
+    attacker_ability_enabled: benchmark.attacker_ability_enabled,
+    defender_ability_enabled: benchmark.defender_ability_enabled,
     move_name: benchmark.move_name,
     move_times_affected: benchmark.move_times_affected || 0,
     critical: benchmark.critical || false,
@@ -1992,14 +2004,12 @@ function canRunCalculation() {
 
 function renderResults(data) {
   if (data.summary) {
-    return resultShell("Damage", `${data.rolls?.length || 0} rolls`, "", `${warningsCard(data.warnings)}${damageCard(data.summary, data.rolls)}`);
+    return resultShell(`${warningsCard(data.warnings)}${damageCard(data.summary, data.rolls)}`);
   }
   const matches = Array.isArray(data) ? data : (data.matches || []);
   const best = data.best || matches[0] || null;
-  const count = matches.length;
-  const bestLabel = best?.sp_line || "No match";
   const body = best ? `${warningsCard(data.warnings)}${damageCard(best.result || best.combined || {}, best.rolls, true)}${bestCard(best)}${matchesTable(matches)}` : `${warningsCard(data.warnings)}<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>`;
-  return resultShell("Results", `${count} matching spreads`, bestLabel, body);
+  return resultShell(body);
 }
 
 function warningsCard(warnings) {
@@ -2007,8 +2017,8 @@ function warningsCard(warnings) {
   return `<article class="warning-card">${warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</article>`;
 }
 
-function resultShell(title, count, best, body) {
-  return `<div class="results-head"><b>${title}</b><span>${count}</span><p>${escapeHtml(best)}</p></div>
+function resultShell(body) {
+  return `<div class="results-head"><b>Results</b></div>
 ${body}<div class="result-actions"><button type="button" disabled aria-disabled="true">▣ Copy Set</button><button type="button" disabled aria-disabled="true">⇩ Download JSON</button><button class="share-action" type="button" disabled aria-disabled="true">↗ Share Link</button></div>`;
 }
 
@@ -2104,8 +2114,8 @@ function initApplyActions() {
   });
 }
 
-function activeAbilityTerrain(parsed) {
-  if (parsed.abilityEnabled === false) return "";
+function activeAbilityTerrain(parsed, enabled = parsed.abilityEnabled ?? true) {
+  if (!enabled) return "";
   return {
     electricsurge: "Electric",
     grassysurge: "Grassy",
@@ -2117,7 +2127,7 @@ function activeAbilityTerrain(parsed) {
 }
 
 function syncAbilityTerrain(card, parsed) {
-  const terrain = activeAbilityTerrain(parsed);
+  const terrain = activeAbilityTerrain(parsed, abilityEnabled(card.dataset.setCard));
   const previous = card.dataset.abilityTerrain || "";
   card.dataset.abilityTerrain = terrain;
   if (terrain === previous) return;
@@ -2126,7 +2136,7 @@ function syncAbilityTerrain(card, parsed) {
   } else if (document.querySelector('input[name="terrain"]:checked')?.value === previous) {
     const other = [...document.querySelectorAll("[data-set-card]")].find(peer => peer !== card);
     const otherSet = other?.querySelector(".raw-editor")?.value || "";
-    setRadio("terrain", activeAbilityTerrain(parseSet(otherSet)) || "None");
+    setRadio("terrain", activeAbilityTerrain(parseSet(otherSet), abilityEnabled(other?.dataset.setCard)) || "None");
   }
   syncToggleLabels();
 }
@@ -2230,8 +2240,10 @@ function percent(value) {
 function initShare() {
   document.querySelector(".share-action")?.addEventListener("click", async () => {
     const payload = {
-      a: document.querySelector('[name="attacker_set"]')?.value || "",
-      d: document.querySelector('[name="defender_set"]')?.value || "",
+      a: stripAbilityEnabled(document.querySelector('[name="attacker_set"]')?.value || ""),
+      d: stripAbilityEnabled(document.querySelector('[name="defender_set"]')?.value || ""),
+      attackerAbilityEnabled: abilityEnabled("attacker"),
+      defenderAbilityEnabled: abilityEnabled("defender"),
       m: document.querySelector('[name="move_name"]')?.value || "",
     };
     const url = `${location.origin}${location.pathname}#${btoa(unescape(encodeURIComponent(JSON.stringify(payload))))}`;
@@ -2245,6 +2257,14 @@ function initShare() {
       const defender = document.querySelector('[data-set-card="defender"] .raw-editor');
       if (attacker && payload.a) attacker.value = payload.a;
       if (defender && payload.d) defender.value = payload.d;
+      for (const side of ["attacker", "defender"]) {
+        const text = side === "attacker" ? payload.a : payload.d;
+        if (text) {
+          const enabled = payload[`${side}AbilityEnabled`] ?? parseSet(text).abilityEnabled ?? true;
+          setChecked(`[data-set-card="${side}"] [data-ability-toggle]`, enabled);
+          document.querySelector(`[data-set-card="${side}"] .raw-editor`).value = stripAbilityEnabled(text);
+        }
+      }
       if (payload.m) document.querySelector('[name="move_name"]').value = payload.m;
     }
   } catch (_) {}
@@ -2300,6 +2320,25 @@ function megaAlias(value) {
   return name.replace("-Mega-", " Mega ");
 }
 
+function initResultsSizing() {
+  const optimized = document.querySelector(".poke-card.optimized-card");
+  const results = resultsPanel();
+  if (!optimized || !results || !window.ResizeObserver) return;
+  const update = () => {
+    if (!window.matchMedia("(min-width: 1200px)").matches) {
+      results.style.removeProperty("--results-height");
+      return;
+    }
+    const available = optimized.getBoundingClientRect().bottom - results.getBoundingClientRect().top;
+    results.style.setProperty("--results-height", `${Math.max(0, available)}px`);
+  };
+  const observer = new ResizeObserver(update);
+  observer.observe(optimized);
+  document.querySelectorAll(".calc-panel, .field").forEach(panel => observer.observe(panel));
+  window.addEventListener("resize", update);
+  update();
+}
+
 // Start metadata during deferred-script execution, before DOMContentLoaded.
 const catalogReady = Promise.all([loadPokemonList(), loadSpeciesAbilities()]);
 const typesReady = Promise.all([loadMoveTypes(), loadSpeciesTypes()]);
@@ -2329,6 +2368,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initMoves();
   initSwap();
   initSpeculativeLoading();
+  initResultsSizing();
   document.querySelector(".workspace")?.addEventListener("input", syncStatPresentation);
   syncStatPresentation();
   autoRun();

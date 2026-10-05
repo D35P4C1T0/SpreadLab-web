@@ -6,7 +6,7 @@ const { test } = require('node:test');
 
 // Exercise the browser's pure catalog functions without a DOM dependency.
 const source = fs.readFileSync(path.join(__dirname, '../assets/app.js'), 'utf8');
-const names = ['setPokemonList', 'baseSpeciesName', 'defaultSpeciesForBase', 'canonicalSpeciesName', 'sortedUniqueNames', 'normalizeName', 'megaStoneForPokemon', 'megaPokemonNameVariants', 'normalizeMegaPokemonKey', 'setWithAbilityState', 'normalizedSetText', 'replaceOrInsertAfter'];
+const names = ['setPokemonList', 'baseSpeciesName', 'defaultSpeciesForBase', 'canonicalSpeciesName', 'sortedUniqueNames', 'normalizeName', 'megaStoneForPokemon', 'megaPokemonNameVariants', 'normalizeMegaPokemonKey', 'abilityEnabled', 'stripAbilityEnabled', 'normalizedSetText', 'replaceOrInsertAfter'];
 const functions = names.map(name => {
   const start = source.indexOf(`function ${name}(`);
   assert.ok(start >= 0, name);
@@ -21,17 +21,17 @@ ${functions}
 ${stones}`, context);
 const evaluate = code => vm.runInContext(code, context);
 
-test('ability checkbox serializes enabled state without rewriting ability or activation', () => {
+test('ability toggle stays separate from Showdown text and legacy annotations are removed', () => {
   context.document = { querySelector: () => ({ checked: false }) };
   const set = 'Mega Lucario Z\nAbility: Aura Guard\nAbility On: true';
-  const disabled = evaluate(`setWithAbilityState(${JSON.stringify(set)}, 'defender')`);
-  assert.match(disabled, /Ability: Aura Guard/);
-  assert.match(disabled, /Ability Enabled: false/);
-  assert.match(disabled, /Ability On: true/);
+  assert.equal(evaluate(`abilityEnabled('defender')`), false);
+  const disabled = evaluate(`normalizedSetText(${JSON.stringify(set + '\nAbility Enabled: false')})`);
+  assert.equal(disabled.trim(), set);
   context.document = { querySelector: () => ({ checked: true }) };
-  const enabled = evaluate(`setWithAbilityState(${JSON.stringify(disabled)}, 'defender')`);
-  assert.match(enabled, /Ability Enabled: true/);
-  assert.equal(enabled.match(/Ability Enabled:/g).length, 1);
+  assert.equal(evaluate(`abilityEnabled('defender')`), true);
+  assert.equal(evaluate(`normalizedSetText(${JSON.stringify(disabled)})`), disabled);
+  const imported = 'Floette-Mega @ Floettite\nAbility: Fairy Aura\nEVs: 252 SpA';
+  assert.equal(evaluate(`stripAbilityEnabled(${JSON.stringify(imported + '\nAbility Enabled: false')})`).trim(), imported);
 });
 
 test('ordinary and Z Mega forms keep distinct stones and Showdown aliases', () => {

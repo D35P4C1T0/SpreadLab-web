@@ -106,8 +106,9 @@ fn early_restore_script() -> &'static str {
     const state = JSON.parse(localStorage.getItem(key) || "null");
     if (!state) return;
     window.__spreadlabEarlyState = state;
-setValue('[data-set-card="attacker"] .raw-editor', state.attacker);
-setValue('[data-set-card="defender"] .raw-editor', state.defender);
+const cleanSet = (text) => typeof text === "string" ? text.replace(/^\s*Ability Enabled:.*(?:\r?\n|$)/gim, "") : text;
+setValue('[data-set-card="attacker"] .raw-editor', cleanSet(state.attacker));
+setValue('[data-set-card="defender"] .raw-editor', cleanSet(state.defender));
 setSelectedMove(state.move);
 setValue('[name="move_times_affected"]', state.moveTimesAffected);
 setValue('[name="hp_percent"]', state.hpPercent);
@@ -140,14 +141,14 @@ fn render_shell(title: &str, body: String) -> String {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>{format!("SpreadLab - {title}")}</title>
                 <link rel="icon" href="/api/item-sprite/Energy%20Root"/>
-        <link rel="stylesheet" href="/assets/app.css?v=20260927-1"/>
+        <link rel="stylesheet" href="/assets/app.css?v=20261005-1"/>
         <link rel="preload" href="/api/pokemon-list" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/species-abilities" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/species-types" r#as="fetch" crossorigin="anonymous"/>
         <link rel="preload" href="/api/move-types" r#as="fetch" crossorigin="anonymous"/>
         <script defer src="/assets/setdex_ncp-g10.js?v=1369b359"></script>
         <script defer src="/assets/common-sets.js?v=202608-mb"></script>
-        <script defer src="/assets/app.js?v=20261005-1"></script>
+        <script defer src="/assets/app.js?v=20261005-2"></script>
             </head>
             <body inner_html=body></body>
         </html>
@@ -183,7 +184,7 @@ fn sidebar() -> String {
     <button type="button" data-open-dialog="metagame" title="Metagame presets"><span class="nav-icon" aria-hidden="true">{metagame_icon}</span><span>Metagame</span></button>
     <button type="button" data-open-dialog="guides" title="Guides"><span class="nav-icon" aria-hidden="true">{guides_icon}</span><span>Guides</span></button>
   </nav>
-  <small><span class="sidebar-context">SpreadLab </span>v{version}<span class="sidebar-context"><br/>Champions · Reg M-C</span></small>
+  <small><a class="version-link" href="https://github.com/D35P4C1T0/SpreadLab-web" target="_blank" rel="noopener noreferrer" aria-label="SpreadLab source code on GitHub"><span class="sidebar-context">SpreadLab </span>v{version}</a><span class="sidebar-context"><br/>Champions · Reg M-C</span></small>
 </aside>
 <dialog id="shell-dialog" aria-labelledby="shell-dialog-title">
   <div class="dialog-heading"><h2 id="shell-dialog-title"></h2><button type="button" data-close-dialog aria-label="Close dialog"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
@@ -352,9 +353,6 @@ fn field_panel() -> &'static str {
 fn results_panel(mode: Mode, result: Option<&ResultBlock>) -> String {
     match result {
         Some(ResultBlock::Error(error)) => result_shell(
-            "Error",
-            "0 results",
-            "",
             &format!(
                 r#"<article class="best-card error-card"><h2>Run failed</h2><p>{}</p></article>"#,
                 escape(error)
@@ -363,9 +361,6 @@ fn results_panel(mode: Mode, result: Option<&ResultBlock>) -> String {
         ),
         Some(ResultBlock::Json(json)) => render_json_result(mode, json),
         None => result_shell(
-            "Results",
-            "No run yet",
-            "Ready",
             r#"<article class="best-card empty-state"><h2>Live results</h2><p>Select a move to start. Every change updates this panel automatically.</p></article>"#,
             "",
         ),
@@ -377,24 +372,13 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         Ok(value) => value,
         Err(_) => {
             return result_shell(
-                "Results",
-                "Parse error",
-                "",
                 &format!(r#"<pre class="json-result visible">{}</pre>"#, escape(json)),
                 "",
             )
         }
     };
     if let Some(summary) = value.get("summary") {
-        let roll_count = value
-            .get("rolls")
-            .and_then(Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0);
         return result_shell(
-            "Damage",
-            &format!("{roll_count} rolls"),
-            "",
             &damage_card(summary, "Damage calculation", "PASS", value.get("rolls")),
             "",
         );
@@ -414,16 +398,8 @@ fn render_json_result(mode: Mode, json: &str) -> String {
         .cloned()
         .or_else(|| matches.first().cloned())
         .unwrap_or(Value::Null);
-    let count = matches.len();
-    let best_label = best
-        .get("sp_line")
-        .and_then(Value::as_str)
-        .unwrap_or("No spread");
     if best.is_null() {
         return result_shell(
-            "Results",
-            "0 matching spreads",
-            "",
             r#"<article class="best-card empty-state"><h2>No matching spread</h2><p>No spread meets this target. Adjust the KO chance, nature, or battle conditions.</p></article>"#,
             "",
         );
@@ -439,18 +415,12 @@ fn render_json_result(mode: Mode, json: &str) -> String {
     }
     html.push_str(&best_spread_card(&best, mode));
     html.push_str(&matches_table(&matches));
-    result_shell(
-        "Results",
-        &format!("{count} results"),
-        best_label,
-        &html,
-        "",
-    )
+    result_shell(&html, "")
 }
 
-fn result_shell(title: &str, count: &str, best: &str, body: &str, extra: &str) -> String {
+fn result_shell(body: &str, extra: &str) -> String {
     format!(
-        r#"<div class="results-head"><b>{title}</b><span>{count}</span><p>{best}</p></div>
+        r#"<div class="results-head"><b>Results</b></div>
 {body}{extra}
 <div class="result-actions"><button type="button" disabled aria-disabled="true">▣ Copy Set</button><button type="button" disabled aria-disabled="true">⇩ Download JSON</button><button class="share-action" type="button" disabled aria-disabled="true">↗ Share Link</button></div>"#
     )

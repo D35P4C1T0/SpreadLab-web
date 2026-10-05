@@ -175,12 +175,12 @@ async fn serve(host: String, port: u16) -> anyhow::Result<()> {
         .route("/ko", get(page_ko).post(form_ko))
         .route("/optimize", get(page_optimize).post(form_optimize))
         .route("/api/meta", get(api_meta))
-        .route("/api/damage", post(api_damage))
-        .route("/api/survive", post(api_survive))
-        .route("/api/survive-sequence", post(api_sequence))
-        .route("/api/ko", post(api_ko))
-        .route("/api/optimize/defensive", post(api_optimize_defensive))
-        .route("/api/optimize/offensive", post(api_optimize_offensive))
+        .route("/api/damage", post(web_damage))
+        .route("/api/survive", post(web_survive))
+        .route("/api/survive-sequence", post(web_sequence))
+        .route("/api/ko", post(web_ko))
+        .route("/api/optimize/defensive", post(web_optimize_defensive))
+        .route("/api/optimize/offensive", post(web_optimize_offensive))
         .route("/api/sprite/:name", get(api_sprite))
         .route("/api/item-sprite/:name", get(api_item_sprite))
         .route("/api/move-types", get(api_move_types))
@@ -623,6 +623,86 @@ fn unsupported_item_names(data: &ChampionsData) -> Vec<String> {
 fn pokemon_champions_item_names() -> impl Iterator<Item = &'static str> {
     spreadlab_rs::data::POKEMON_CHAMPIONS_ITEMS.iter().copied()
 }
+
+// Keep UI ability toggles outside Showdown text. The library still accepts its
+// legacy annotation, so translate explicit JSON overrides at the HTTP boundary.
+struct WebCalculation<T>(T);
+
+impl<'de, T: DeserializeOwned> Deserialize<'de> for WebCalculation<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut value = Value::deserialize(deserializer)?;
+        apply_ability_overrides(&mut value).map_err(de::Error::custom)?;
+        serde_json::from_value(value)
+            .map(Self)
+            .map_err(de::Error::custom)
+    }
+}
+
+fn apply_ability_overrides(value: &mut Value) -> Result<(), String> {
+    for side in ["attacker", "defender"] {
+        let flag = format!("{side}_ability_enabled");
+        if let Some(enabled) = value.get(&flag).filter(|flag| !flag.is_null()) {
+            let enabled = enabled
+                .as_bool()
+                .ok_or_else(|| format!("{flag} must be a boolean"))?;
+            let set_key = format!("{side}_set");
+            let text = value
+                .get(&set_key)
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("{set_key} must be a string"))?;
+            let mut lines = text
+                .lines()
+                .filter(|line| {
+                    !line
+                        .trim()
+                        .to_ascii_lowercase()
+                        .starts_with("ability enabled:")
+                })
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            lines.push(format!("Ability Enabled: {enabled}"));
+            value[set_key] = Value::String(lines.join("\n"));
+        }
+    }
+    for key in ["hits", "benchmarks"] {
+        if let Some(entries) = value.get_mut(key).and_then(Value::as_array_mut) {
+            for entry in entries {
+                apply_ability_overrides(entry)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+macro_rules! web_calculation_handler {
+    ($name:ident, $handler:ident, $request:ty) => {
+        async fn $name(
+            state: State<AppState>,
+            Json(WebCalculation(request)): Json<WebCalculation<$request>>,
+        ) -> Result<Json<Value>, WebError> {
+            $handler(state, Json(request)).await
+        }
+    };
+}
+
+web_calculation_handler!(web_damage, api_damage, api::DamageRequest);
+web_calculation_handler!(web_survive, api_survive, api::HpDefSurvivalRequest);
+web_calculation_handler!(
+    web_sequence,
+    api_sequence,
+    api::CombinedHpDefSurvivalRequest
+);
+web_calculation_handler!(web_ko, api_ko, api::OffensiveKoRequest);
+web_calculation_handler!(
+    web_optimize_defensive,
+    api_optimize_defensive,
+    api::OptimizeRequest
+);
+web_calculation_handler!(
+    web_optimize_offensive,
+    api_optimize_offensive,
+    api::OptimizeRequest
+);
 
 async fn api_damage(
     State(state): State<AppState>,
@@ -1538,6 +1618,53 @@ fn item_slug(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ability_json_overrides_cover_benchmarks_and_sequence_hits() {
+        let mut sequence = json!({
+            "defender_set": "Mega Lucario Z\nAbility: Aura Guard\nAbility Enabled: true",
+            "defender_ability_enabled": false,
+            "hits": [{"attacker_set": "Arcanine\nAbility: Flash Fire", "attacker_ability_enabled": false}]
+        });
+        apply_ability_overrides(&mut sequence).unwrap();
+        assert!(
+            !spreadlab_rs::showdown::parse_set(sequence["defender_set"].as_str().unwrap())
+                .unwrap()
+                .ability_enabled
+        );
+        assert!(
+            !spreadlab_rs::showdown::parse_set(
+                sequence["hits"][0]["attacker_set"].as_str().unwrap()
+            )
+            .unwrap()
+            .ability_enabled
+        );
+        let mut optimization = json!({"benchmarks": [sequence["hits"][0].clone()]});
+        apply_ability_overrides(&mut optimization).unwrap();
+        assert_eq!(
+            optimization["benchmarks"][0]["attacker_set"],
+            sequence["hits"][0]["attacker_set"]
+        );
+        assert_eq!(
+            sequence["defender_set"]
+                .as_str()
+                .unwrap()
+                .matches("Ability Enabled:")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn ability_json_overrides_validate_types_and_preserve_legacy_clients() {
+        let mut legacy = json!({"defender_set": "Arcanine\nAbility Enabled: false"});
+        let original = legacy.clone();
+        apply_ability_overrides(&mut legacy).unwrap();
+        assert_eq!(legacy, original);
+        let mut invalid = json!({"defender_set": "Arcanine", "defender_ability_enabled": "false"});
+        assert!(apply_ability_overrides(&mut invalid).is_err());
+        assert!(apply_ability_overrides(&mut json!({"attacker_ability_enabled": true})).is_err());
+    }
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, Instant};
 

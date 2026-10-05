@@ -232,8 +232,11 @@ state explicitly where applicable.
 
 Ability behavior is owned by SpreadLab and the damage engine. The web app sends
 ability state and manual field/stage inputs without applying entry effects.
-`Ability Enabled:` controls the Active checkbox; `Ability On:` remains the
-library's conditional activation input. Mechanics regression tests live in the
+The Active checkbox is stored separately in browser state, saved-set metadata,
+shared links, and the API's `attacker_ability_enabled` / `defender_ability_enabled`
+boolean fields. Imported legacy `Ability Enabled:` annotations migrate to that
+state and are removed from Showdown text. `Ability On:` remains the library's
+conditional activation input. Mechanics regression tests live in the
 library repositories.
 
 Local library development happens in this repository. The engine and the
